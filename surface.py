@@ -10,30 +10,19 @@ from spectrum import Spectrum
 class Surface(Spectrum):
     def __init__(self,const):
 
-
-
-        self.N = const["surface"]["kSize"][0]
-        k_edge = const["surface"]["kEdge"][0]
-        self.M = const["surface"]["phiSize"][0]
-        random_phases = const["surface"]["randomPhases"][0]
+        self.N = const["spectrum.kSize"][0]
+        self.M = const["spectrum.phiSize"][0]
+        random_phases = const["surface.enableRandomPhases"][0]
         kfrag = "log"
-
-
-
-        self.direction = []
-
-        if const["wind"]["enable"][0]:
-            self.direction.append(np.deg2rad(const["wind"]["direction"][0]))
-
-        if const["swell"]["enable"][0]:
-            self.direction.append(np.deg2rad(const["swell"]["direction"][0]))
-
-        self.direction = np.array(self.direction)
-
-        print(self.direction)
+        self.wind = np.deg2rad(const["wind.direction"][0])
 
         Spectrum.__init__(self, const)
         self.spectrum = self.get_spectrum()
+        k_edge = const["spectrum.edge"][0]
+
+        progress_bar = tqdm( total = 2,  leave = False , desc="Init")
+
+
 
 
 
@@ -42,7 +31,6 @@ class Surface(Spectrum):
                 self.k = np.logspace(np.log10(self.k_m/4), np.log10(self.k_edge['Ku']), self.N + 1)
             else:
                 self.k = np.logspace(np.log10(self.KT[0]), np.log10(self.KT[1]), self.N + 1)
-
         elif kfrag == 'quad':
             self.k = np.zeros(self.N+1)
             for i in range(self.N+1):
@@ -66,26 +54,28 @@ class Surface(Spectrum):
                 )
 
         self.phi = np.linspace(-np.pi, np.pi,self.M + 1)
-        # self.A = np.empty(shape=(self.N, self.M))
-        # self.F = np.copy(self.A)
-
-        for i, spectrum in enumerate(self.spectrum):
-            A = self.amplitude(self.k, spectrum)
-            F = self.angle(self.k,self.phi, direction=self.direction[i])
-            if i == 0:
-                self.A = np.array([A])
-                self.F = np.array([F])
-            else:
-                self.A = np.vstack((self.A, np.array([A])))
-                self.F = np.vstack((self.F, np.array([F])))
+        self.phi_c = self.phi + self.wind
 
 
-        if random_phases:
-            self.psi = np.random.uniform(0, 2*pi, size=(self.direction.size, self.N, self.M))
-        else:
-            self.psi = np.random.uniform(0, 2*pi, size=(self.direction.size, self.N, self.M))
 
 
+        if random_phases == 0:
+            self.psi = np.array([
+                    [0 for m in range(self.M) ] for n in range(self.N) ])
+        elif random_phases == 1:
+            self.psi = np.array([
+                [ np.random.uniform(0,2*pi) for m in range(self.M)]
+                            for n in range(self.N) ])
+
+
+
+        self.A = self.amplitude(self.k)
+        progress_bar.update(1)
+        self.F = self.angle(self.k,self.phi)
+        progress_bar.update(1)
+
+        progress_bar.close()
+        progress_bar.clear()
 
     def B(self,k):
           def b(k):
@@ -97,9 +87,9 @@ class Surface(Spectrum):
           B=10**b(k)
           return B
 
-    def Phi(self,k,phi, direction = 0):
+    def Phi(self,k,phi):
         # Функция углового распределения
-        phi = phi - direction
+        phi = phi - self.wind
         normalization = lambda B: B/np.arctan(np.sinh(2* (pi)*B))
         B0 = self.B(k)
         A0 = normalization(B0)
@@ -107,28 +97,24 @@ class Surface(Spectrum):
         return Phi
 
 
-    def angle(self,k, phi, direction):
+    def angle(self,k, phi):
         M = self.M
         N = self.N
-
-
-        Phi = lambda phi,k, direction: self.Phi(k, phi, direction)
+        Phi = lambda phi,k: self.Phi(k,phi)
         integral = np.zeros((N,M))
         for i in range(N):
             for j in range(M):
                 # integral[i][j] = integrate.quad( Phi, phi[j], phi[j+1], args=(k[i],) )[0]
-                integral[i][j] += np.trapz( Phi( phi[j:j+2],k[i], direction=direction), phi[j:j+2], )
+                integral[i][j] = np.trapz( Phi( phi[j:j+2],k[i] ), phi[j:j+2])
         amplitude = np.sqrt(2 *integral )
         return amplitude
 
-    def amplitude(self, k, spectrum):
+    def amplitude(self, k):
         N = k.size
-
+        S = self.spectrum
         integral = np.zeros(k.size-1)
-        # for S in self.spectrum:
         for i in range(1,N):
-            integral[i-1] += integrate.quad(spectrum,k[i-1],k[i])[0] 
-
+            integral[i-1] = integrate.quad(S,k[i-1],k[i])[0] 
         amplitude = np.sqrt(2 *integral )
         return np.array(amplitude)
 
@@ -143,22 +129,18 @@ class Surface(Spectrum):
         A = self.A
         F = self.F
         psi = self.psi
-        self.surface = [0 for i in range(A.shape[0])]
-        # print(A.shape[0])
-        progress_bar = tqdm( total = A.shape[0]*N*M,  leave = False , desc="Surface calc")
-        for s in range(A.shape[0]):
-            for n in range(N):
-                for m in range(M):
-                    kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
-                    tmp = A[s][n] * \
-                        np.cos( kr + psi[s][n][m]) * F[s][n][m]
-
-                    progress_bar.update(1)
-                    self.surface[s] += tmp
-            # print(self.surface.shape)
-            # print(self.surface)
+        self.surface = 0
+        progress_bar = tqdm( total = N*M,  leave = False , desc="Surface calc")
+        for n in range(N):
+            for m in range(M):
+                kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
+                tmp = A[n] * \
+                    np.cos( kr + psi[n][m]) * F[n][m]
 
 
+                self.surface += tmp
+
+                progress_bar.update(1)
         progress_bar.close()
         progress_bar.clear()
         heights = self.surface
@@ -254,7 +236,6 @@ class Surface(Spectrum):
 
         self.cwm_x = 0
         self.cwm_y = 0
-
         for n in range(N):
             for m in range(M):
                 kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
@@ -334,9 +315,9 @@ if __name__ == "__main__":
             ap.print_help()
             sys.exit(1)
 
-    x_size = const["surface"]["x"][0]
-    y_size = const["surface"]["y"][0]
-    grid_size = const["surface"]["gridSize"][0]
+    x_size = const["surface.x"][0]
+    y_size = const["surface.y"][0]
+    grid_size = const["surface.gridSize"][0]
 
 
     args = vars(ap.parse_args())
@@ -351,23 +332,22 @@ if __name__ == "__main__":
 
 
     if args["spaceplot"]:
-        Heights = surface.Surface_space([X,Y]) 
-        for heights in Heights:
-            fig,ax = plt.subplots()
-            mappable = ax.contourf(X,Y,heights, levels=100)
-            ax.set_xlabel("$x,$ м")
-            ax.set_ylabel("$y,$ м")
-            bar = fig.colorbar(mappable=mappable,ax=ax)
-            bar.set_label("высота, м")
+        heights = surface.Surface_space([X,Y]) 
+        fig,ax = plt.subplots()
+        mappable = ax.contourf(X,Y,heights, levels=100)
+        ax.set_xlabel("$x,$ м")
+        ax.set_ylabel("$y,$ м")
+        bar = fig.colorbar(mappable=mappable,ax=ax)
+        bar.set_label("высота, м")
 
 
-            ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
-            ax.text(0.05,0.95,
-                '\n'.join((
-                        '$\\sigma^2_s=%.2f$' % (np.std(heights)**2), 
-                        '$\\langle z \\rangle = %.2f$' % (np.mean(heights)),
-                )),
-                verticalalignment='top',transform=ax.transAxes,)
+        ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
+        ax.text(0.05,0.95,
+            '\n'.join((
+                    '$\\sigma^2_s=%.2f$' % (np.std(heights)**2), 
+                    '$\\langle z \\rangle = %.2f$' % (np.mean(heights)),
+            )),
+            verticalalignment='top',transform=ax.transAxes,)
 
     if args["timeplot"]:
             heights = surface.Surface_time(t) 

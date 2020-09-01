@@ -3,14 +3,13 @@ from scipy import interpolate, integrate
 
 class Spectrum:
     def __init__(self, const):
-        self.U10 = const["wind"]["speed"][0]
-        self.U10_swell = const["swell"]["speed"][0]
-        x = const["surface"]["nonDimWindFetch"][0]
+        self.U10 = const["wind.speed"][0]
+        x = const["spectrum.nonDimWindFetch"][0]
         self.band = const["band"][0]
-        KT = const["surface"]["kEdge"][0]
-        self.g = const["constants"]["gravityAcceleration"][0]
-        self.swell = const["swell"]["enable"][0]
-        self.wind_waves = const["wind"]["enable"][0]
+        KT = const["spectrum.edge"][0]
+        self.g = const["gravityAcceleration"][0]
+        self.swell = const["spectrum.swell"][0]
+        self.wind_waves = const["spectrum.windWaves"][0]
 
 
         # коэффициент gamma (см. спектр JONSWAP)
@@ -18,7 +17,6 @@ class Spectrum:
         # коэффициент alpha (см. спектр JONSWAP)
         self.__alpha = self.Alpha(x)
         # координата пика спектра по частоте
-
         self.omega_m = self.Omega(x) * self.g/self.U10
         # координата пика спектра по волновому числу
         self.k_m = self.k_max( self.omega_m )
@@ -50,15 +48,9 @@ class Spectrum:
         # k0 -- густая сетка, нужна для интегрирования и интерполирования
         self.k0= np.logspace(np.log10(self.KT[0]), np.log10(self.KT[-1]), 10**4)
 
-    def get_spectrum(self, ):
+    def get_spectrum(self):
         # интерполируем смоделированный спектр
-        self.spectrum = []
-
-        if self.wind_waves:
-            self.spectrum.append(self.interpolate(self.full_spectrum))
-        if self.swell:
-            self.spectrum.append(self.interpolate(self.swell_spectrum))
-
+        self.spectrum = self.interpolate(self.full_spectrum)
         return self.spectrum
 
     def find_decision(self,omega):
@@ -157,38 +149,40 @@ class Spectrum:
             full_spectrum = [0]
             k = [k]
 
-        limit_1 = 1.2
-        self.limit_2 = (
-                + 0.371347584096022408
-                + 0.290241610467870486 * self.U10
-                + 0.290178032985796564 / self.U10
-                    )
-        self.limit_3 = self.omega_k(270.0)
-        self.limit_4 = self.omega_k(1020.0)
-        self.limit_k = np.zeros(4)
-        self.limit_k[0] = self.find_decision(limit_1 * self.omega_m)
-        self.limit_k[1] = self.find_decision(self.limit_2 * self.omega_m)
-        self.limit_k[2] = 270.0
-        self.limit_k[3] = 1020.0
+        if self.wind_waves:
+            limit_1 = 1.2
+            self.limit_2 = (
+                    + 0.371347584096022408
+                    + 0.290241610467870486 * self.U10
+                    + 0.290178032985796564 / self.U10
+                        )
+            self.limit_3 = self.omega_k(270.0)
+            self.limit_4 = self.omega_k(1020.0)
+            self.limit_k = np.zeros(4)
+            self.limit_k[0] = self.find_decision(limit_1 * self.omega_m)
+            self.limit_k[1] = self.find_decision(self.limit_2 * self.omega_m)
+            self.limit_k[2] = 270.0
+            self.limit_k[3] = 1020.0
 
 
-        for i in range(k.size):
-            if k[i] <= self.limit_k[0]:
-                full_spectrum[i] =  self.spectrum0(0,k[i])
-            elif k[i] <= self.limit_k[1]:
-                full_spectrum[i] = self.spectrum0(1,k[i])
-            elif k[i] <= self.limit_k[2]:
-                full_spectrum[i] = self.spectrum0(2,k[i])
-            elif k[i] <= self.limit_k[3]:
-                full_spectrum[i] = self.spectrum0(3,k[i])
-            else:
-                full_spectrum[i] = self.spectrum0(4,k[i])
+            for i in range(k.size):
+                if k[i] <= self.limit_k[0]:
+                    full_spectrum[i] =  self.spectrum0(0,k[i])
+                elif k[i] <= self.limit_k[1]:
+                    full_spectrum[i] = self.spectrum0(1,k[i])
+                elif k[i] <= self.limit_k[2]:
+                    full_spectrum[i] = self.spectrum0(2,k[i])
+                elif k[i] <= self.limit_k[3]:
+                    full_spectrum[i] = self.spectrum0(3,k[i])
+                else:
+                    full_spectrum[i] = self.spectrum0(4,k[i])
 
 
 
-
+        if self.swell:
+            for i in range(k.size):
+                full_spectrum[i] += self.swell_spectrum(k[i]) 
         return full_spectrum
-
 
 
     def interpolate(self, spectrum):
@@ -196,12 +190,8 @@ class Spectrum:
         return spectrum
     
     def swell_spectrum(self, k):
-        
-        print(self.U10_swell)
-        omega_m = self.Omega(20170) * self.g/self.U10_swell
-        W = np.power(omega_m/self.omega_k(k), 5)
-
-        sigma_sqr = 0.0081 * self.g**2 * np.exp(-0.05) / (6 * omega_m**4)
+        W = np.power(self.omega_m/self.omega_k(k), 5)
+        sigma_sqr = 0.0081 * self.g**2 * np.exp(-0.05) / (6 * self.omega_m**4)
         spectrum = 6 * sigma_sqr * W / self.omega_k(k) * np.exp(-1.2 * W)   * self.det(k)
         return spectrum
 
@@ -223,6 +213,7 @@ if  __name__ == "__main__":
     ap.add_argument("-s", "--save", required=False, action='store_true')
     ap.add_argument("-c", "--config", required=False, default="rc.json")
 
+    ap.add_argument("-d", "--difference", required=False, action='store_true')
 
     args = vars(ap.parse_args())
 
@@ -242,11 +233,22 @@ if  __name__ == "__main__":
         fig, ax = plt.subplots()
 
         for j in range(len(U)):
-            const["wind"]["speed"][0] = U[j]
-            spectrum = Spectrum(const)
-            S = spectrum.get_spectrum()[0]
-            k = spectrum.k0[0:-1:100]
-            ax.loglog(k, k**0*S(k),label="$U=%.1f$" % (U[j]) )
+            const["wind.speed"][0] = U[j]
+            if args["difference"]:
+                bool1 = [False, True, True]
+                bool2 = [True, False, True]
+                for n in range(len(bool1)):
+                    const["spectrum.swell"][0] = bool1[n]
+                    const["spectrum.windWaves"][0] = bool2[n]
+                    spectrum = Spectrum(const)
+                    S = spectrum.get_spectrum()
+                    k = spectrum.k0[0:-1:100]
+                    ax.loglog(k, k**0*S(k),label="s=%s, w=%s" % (const["spectrum.swell"][0], const["spectrum.windWaves"][0]) )
+            else:
+                spectrum = Spectrum(const)
+                S = spectrum.get_spectrum()
+                k = spectrum.k0[0:-1:100]
+                ax.loglog(k, k**0*S(k),label="$U=%.1f$" % (U[j]) )
 
             ax.set_title("%s-диапазон" % band[i])
             ax.set_ylabel("$S(\\kappa),   м^3 \\cdot рад^{-1}$")

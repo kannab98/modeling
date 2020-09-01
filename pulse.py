@@ -29,7 +29,7 @@ class Pulse():
 
 
         self.timp = const["antenna.impulseDuration"][0]
-        self.c =  const["constants"]["lightSpeed"][0]
+        self.c =  const["light.speed"][0]
         self.R = self.r - self.r0
 
         self.Rabs = self.Rabs_calc(self.R)
@@ -40,9 +40,6 @@ class Pulse():
         #!$gane\_width \equiv \theta_{3dB}$!
         gane_width = np.deg2rad(const["antenna.gainWidth"][0]) # Ширина диаграммы направленности в радианах
         self.gamma = 2*np.sin(gane_width/2)**2/np.log(2)
-        F = 0.5
-        # self.sigma =  F**2/( 2*np.cos(self.theta0)**4 * np.sqrt(sigmaxx *
-        #     sigmayy) ) * np.exp(np.tan(self.theta0/(2 * sigmaxx))
     
     def main(self):
         # self.theta  = self.theta_calc(self.R, self.Rabs)

@@ -137,6 +137,11 @@ class Retracking():
         print(sigma_c*1e+9)
         sigma_s = np.sqrt((sigma_c**2 - sigma_p**2))*self.c/2
         return 4*sigma_s
+
+    def emb(self, U10):
+        a = np.array([0.0029, -0.0038, 0.000155 ])
+        emb = np.sum([a[i]*U10**i for i in range(a.size)
+        return emb
     
 if __name__ == "__main__":
     from surface import Surface
