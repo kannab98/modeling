@@ -58,7 +58,7 @@ T0 = (z0 - 5)/c
 for j, kernel in enumerate(kernels):
 
 
-    surf = np.zeros((2, 3, x0.size))
+    surf = np.zeros((3, x0.size))
     stream = cuda.stream()
     kernel[blockspergrid, threadsperblock, stream](surf, x0, y0, k, phi, A, F, psi)
 
