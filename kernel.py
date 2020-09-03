@@ -6,7 +6,7 @@ TPB=16
 
 
 @cuda.jit
-def kernel_cwm(ans, x, y, k, phi, A, F, psi, s):
+def kernel_cwm(ans, x, y, k, phi, A, F, psi):
     i = cuda.grid(1)
 
     if i >= x.shape[0]:
@@ -15,9 +15,9 @@ def kernel_cwm(ans, x, y, k, phi, A, F, psi, s):
     for n in range(k.size): 
         for m in range(phi.size):
                 kr = k[n]*(x[i]*math.cos(phi[m]) + y[i]*math.sin(phi[m]))      
-                Af = A[s][n] * F[s][n][m]
-                Cos =  math.cos(kr + psi[s][n][m]) * Af
-                Sin =  math.sin(kr + psi[s][n][m]) * Af
+                Af = A[n] * F[n][m]
+                Cos =  math.cos(kr + psi[n][m]) * Af
+                Sin =  math.sin(kr + psi[n][m]) * Af
 
                 kx = k[n] * math.cos(phi[m])
                 ky = k[n] * math.sin(phi[m])
