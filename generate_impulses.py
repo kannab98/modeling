@@ -63,7 +63,7 @@ for j, kernel in enumerate(kernels):
     kernel[blockspergrid, threadsperblock, stream](surf, x0, y0, k, phi, A, F, psi)
 
 
-    T = np.linspace(T0-Hs*1.2/c, np.sqrt(z0**2+xmax**2)/c, 104)
+    T = np.linspace(T0-Hs/c, np.sqrt(z0**2+xmax**2)/c, 104)
     P = np.zeros(T.size)
 
     pulse = Pulse(surf, x0, y0, const)
@@ -95,8 +95,7 @@ ax.set_ylabel('P')
 plt.legend()
 plt.savefig('%s/impulse.png' % (now))
 
-data_p.to_csv('%s/impulse%d_%s.csv' % (now, const["wind.speed"][0], now), index = False, sep=';')
-
+data_p.to_csv('%s/impulse.csv' % (now), index = False, sep=';')
 
 
 with open('%s/rc.json' % (now), 'w', encoding="utf-8") as f:
