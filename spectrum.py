@@ -25,7 +25,7 @@ class Spectrum:
         # длина доминантной волны
         self.lambda_m = 2 * np.pi / self.k_m
 
-        self.sigma_sqr = self.__alpha * self.__gamma * self.g**2 *np.exp(-0.05)/(6*self.omega_m**4)
+
 
         self.k_edge = {} 
 
@@ -55,6 +55,8 @@ class Spectrum:
 
         if self.wind_waves:
             self.spectrum = self.interpolate(self.full_spectrum)
+
+            self.sigma_sqr = np.trapz(self.spectrum(self.k0), self.k0)
         # if self.swell:
         #     self.spectrum.append(self.interpolate(self.swell_spectrum))
 

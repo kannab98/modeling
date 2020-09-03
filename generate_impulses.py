@@ -1,4 +1,4 @@
-from kernel import *
+:rom kernel import *
 from surface import Surface
 import datetime
 
@@ -24,6 +24,11 @@ surface = Surface(const)
 host_constants = surface.export()
 stream = cuda.stream()
 k, phi, A, F, psi = (cuda.to_device(host_constants[i], stream = stream) for i in range(len(host_constants)))
+
+
+Hs = 4 * np.sqrt(surface.sigma_sqr)
+xmax = 4 * np.sqrt(Hs * z0)
+print(xmax)
 
 x0 = np.linspace(-xmax, xmax, grid_size)
 y0 = np.linspace(-xmax, xmax, grid_size)
@@ -55,9 +60,8 @@ for j, kernel in enumerate(kernels):
     stream = cuda.stream()
     kernel[blockspergrid, threadsperblock, stream](surf, x0, y0, k, phi, A, F, psi)
 
-    hmax = surf[0].max()
-    xmax = np.sqrt(16*z0*hmax)
-    T = np.linspace(T0-hmax/c, np.sqrt(z0**2+xmax**2)/c, 104)
+
+    T = np.linspace(T0-Hs*1.2/c, np.sqrt(z0**2+xmax**2)/c, 104)
     P = np.zeros(T.size)
 
     pulse = Pulse(surf, x0, y0, const)

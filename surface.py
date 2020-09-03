@@ -67,15 +67,16 @@ class Surface(Spectrum):
         # self.A = np.empty(shape=(self.N, self.M))
         # self.F = np.copy(self.A)
 
-        for i, spectrum in enumerate(self.spectrum):
-            A = self.amplitude(self.k, spectrum)
-            F = self.angle(self.k,self.phi, direction=self.direction[i])
-            if i == 0:
-                self.A = np.array([A])
-                self.F = np.array([F])
-            else:
-                self.A = np.vstack((self.A, np.array([A])))
-                self.F = np.vstack((self.F, np.array([F])))
+        # for i, spectrum in enumerate(self.spectrum):
+        spectrum = self.spectrum
+        self.A = self.amplitude(self.k, spectrum)
+        self.F = self.angle(self.k,self.phi, direction=self.direction[0])
+            # if i == 0:
+                # self.A = np.array([A])
+                # self.F = np.array([F])
+            # else:
+                # self.A = np.vstack((self.A, np.array([A])))
+                # self.F = np.vstack((self.F, np.array([F])))
 
 
         if random_phases:
