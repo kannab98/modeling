@@ -52,12 +52,11 @@ class Spectrum:
 
     def get_spectrum(self, ):
         # интерполируем смоделированный спектр
-        self.spectrum = []
 
         if self.wind_waves:
-            self.spectrum.append(self.interpolate(self.full_spectrum))
-        if self.swell:
-            self.spectrum.append(self.interpolate(self.swell_spectrum))
+            self.spectrum = self.interpolate(self.full_spectrum)
+        # if self.swell:
+        #     self.spectrum.append(self.interpolate(self.swell_spectrum))
 
         return self.spectrum
 
