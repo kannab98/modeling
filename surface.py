@@ -71,6 +71,8 @@ class Surface(Spectrum):
         spectrum = self.spectrum
         self.A = self.amplitude(self.k, spectrum)
         self.F = self.angle(self.k,self.phi, direction=self.direction[0])
+
+        self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
             # if i == 0:
                 # self.A = np.array([A])
                 # self.F = np.array([F])
@@ -79,10 +81,10 @@ class Surface(Spectrum):
                 # self.F = np.vstack((self.F, np.array([F])))
 
 
-        if random_phases:
-            self.psi = np.random.uniform(0, 2*pi, size=(self.direction.size, self.N, self.M))
-        else:
-            self.psi = np.random.uniform(0, 2*pi, size=(self.direction.size, self.N, self.M))
+        # if random_phases:
+        #     self.psi = np.random.uniform(0, 2*pi, size=(self.direction.size, self.N, self.M))
+        # else:
+        #     self.psi = np.random.uniform(0, 2*pi, size=(self.direction.size, self.N, self.M))
 
 
 
