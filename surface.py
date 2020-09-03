@@ -10,8 +10,6 @@ from spectrum import Spectrum
 class Surface(Spectrum):
     def __init__(self,const):
 
-
-
         self.N = const["surface"]["kSize"][0]
         k_edge = const["surface"]["kEdge"][0]
         self.M = const["surface"]["phiSize"][0]
@@ -310,6 +308,7 @@ class Surface(Spectrum):
                 self.cwm_x_dot += tmp * k[n]*np.cos(phi[m])**2
                 self.cwm_y_dot += tmp * k[n]*np.sin(phi[m])**2
         return [self.cwm_x_dot, self.cwm_y_dot]
+
     
 if __name__ == "__main__":
     import sys

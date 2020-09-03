@@ -117,15 +117,17 @@ T0 = (z0 - 5)/c
 
 for j, kernel in enumerate(kernels):
 
-    T = np.linspace(T0, np.sqrt(z0**2+xmax**2)/c, 512)
-    P = np.zeros(T.size)
+
 
     surf = np.zeros((2, 3, x0.size))
-    for s in range(2):
-        stream = cuda.stream()
-        kernel[blockspergrid, threadsperblock, stream](surf[s], x0, y0, k, phi,
-                A, F, psi, s)
-    print(surf)
+    stream = cuda.stream()
+    kernel[blockspergrid, threadsperblock, stream](surf, x0, y0, k, phi, A, F, psi)
+
+    hmax = surf[0].max()
+    hmax = np.sqrt(16*z0*hmax)
+    T = np.linspace(T0-hmax/c, np.sqrt(z0**2+xmax**2)/c, 104)
+    P = np.zeros(T.size)
+
     mn.append(weighted_mean(x0, y0, surf))
     disp.append(weighted_mean(x0, y0, surf, p=2) - mn[-1])
     Hs = 4*np.sqrt(disp[-1])
