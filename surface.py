@@ -128,14 +128,14 @@ class Surface(Spectrum):
         integral = np.zeros(k.size-1)
         # for S in self.spectrum:
         for i in range(1,N):
-            integral[i-1] += integrate.quad(spectrum,k[i-1],k[i])[0] 
+            integral[i-1] += integrate.quad(spectrum,k[i-1],k[i])[0]
 
         amplitude = np.sqrt(2 *integral )
         return np.array(amplitude)
 
     def export(self):
         return self.k, self.phi, self.A, self.F, self.psi
-    
+
     def Surface_space(self,r):
         N = self.N
         M= self.M
@@ -177,7 +177,7 @@ class Surface(Spectrum):
         for n in range(N):
             for m in range(M):
                 tmp = A[n] * \
-                    np.cos( 
+                    np.cos(
                         +psi[n][m]
                         +self.omega_k(k[n])*t) \
                         * F[n][m]
@@ -214,14 +214,14 @@ class Surface(Spectrum):
             for m in range(M):
                 kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
                 tmp = A[n] * \
-                    np.cos( 
+                    np.cos(
                         +kr
                         +psi[n][m]
                         +self.omega_k(k[n])*t) \
                         * F[n][m]
 
                 tmp1 = -A[n] * \
-                    np.sin( 
+                    np.sin(
                         +kr
                         +psi[n][m]
                         +self.omega_k(k[n])*t) \
@@ -230,7 +230,7 @@ class Surface(Spectrum):
                 if k[n] <= self.k_c.max():
                     s += tmp
                     s_xx += k[n]*np.cos(phi[m])*tmp1
-                    s_yy += k[n]*np.sin(phi[m])*tmp1 
+                    s_yy += k[n]*np.sin(phi[m])*tmp1
 
                 else :
                     s1 += tmp
@@ -260,7 +260,7 @@ class Surface(Spectrum):
             for m in range(M):
                 kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
                 tmp = -A[n] * \
-                    np.sin( 
+                    np.sin(
                         +kr
                         +psi[n][m]) \
                         * F[n][m]
@@ -282,7 +282,7 @@ class Surface(Spectrum):
         for n in range(N):
             for m in range(M):
                 tmp = -A[n] *  np.sin( self.omega_k(k[n])*t  +psi[n][m])  * F[n][m]
-                self.cwm_t += tmp 
+                self.cwm_t += tmp
 
         return self.cwm_t
 
@@ -302,7 +302,7 @@ class Surface(Spectrum):
             for m in range(M):
                 kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
                 tmp = -A[n] * \
-                    np.cos( 
+                    np.cos(
                         +kr
                         +psi[n][m]
                         +self.omega_k(k[n])*t) \
@@ -312,7 +312,7 @@ class Surface(Spectrum):
                 self.cwm_y_dot += tmp * k[n]*np.sin(phi[m])**2
         return [self.cwm_x_dot, self.cwm_y_dot]
 
-    
+
 if __name__ == "__main__":
     import sys
     import argparse
@@ -353,7 +353,7 @@ if __name__ == "__main__":
 
 
     if args["spaceplot"]:
-        Heights = surface.Surface_space([X,Y]) 
+        Heights = surface.Surface_space([X,Y])
         for heights in Heights:
             fig,ax = plt.subplots()
             mappable = ax.contourf(X,Y,heights, levels=100)
@@ -366,13 +366,13 @@ if __name__ == "__main__":
             ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
             ax.text(0.05,0.95,
                 '\n'.join((
-                        '$\\sigma^2_s=%.2f$' % (np.std(heights)**2), 
+                        '$\\sigma^2_s=%.2f$' % (np.std(heights)**2),
                         '$\\langle z \\rangle = %.2f$' % (np.mean(heights)),
                 )),
                 verticalalignment='top',transform=ax.transAxes,)
 
     if args["timeplot"]:
-            heights = surface.Surface_time(t) 
+            heights = surface.Surface_time(t)
             fig,ax = plt.subplots()
             ax.plot(t,heights)
             ax.set_xlabel("$t,$ с")
@@ -381,7 +381,7 @@ if __name__ == "__main__":
             ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
             ax.text(0.05,0.95,
                 '\n'.join((
-                        '$\\sigma^2_s=%.2f$' % (np.std(heights)**2), 
+                        '$\\sigma^2_s=%.2f$' % (np.std(heights)**2),
                         '$\\langle z \\rangle = %.2f$' % (np.mean(heights)),
                 )),
                 verticalalignment='top',transform=ax.transAxes,)
