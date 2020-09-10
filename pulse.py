@@ -13,8 +13,9 @@ class Pulse():
                             surface[0].flatten()
                         ))
 
-        self.z0 = const["antenna.z"][0] + surface[0].max()
-        r0 = [ const["antenna.x"][0], const["antenna.y"][0], const["antenna.z"][0]]
+        self.z0 = const["antenna"]["z"][0] + surface[0].max()
+        r0 = [ const["antenna"]["x"][0], const["antenna"]["y"][0], const["antenna"]["z"][0]]
+
         self.r0 = np.vstack((
                       +r0[0]*np.zeros(self.x.size), 
                       +r0[1]*np.zeros(self.y.size), 
@@ -28,7 +29,7 @@ class Pulse():
                     ))
 
 
-        self.timp = const["antenna.impulseDuration"][0]
+        self.timp = const["antenna"]["impulseDuration"][0]
         self.c =  const["constants"]["lightSpeed"][0]
         self.R = self.r - self.r0
 
@@ -38,13 +39,13 @@ class Pulse():
         self.theta0 = self.theta0_calc(self.R, self.n, self.Rabs, self.Nabs)
 
         #!$gane\_width \equiv \theta_{3dB}$!
-        gane_width = np.deg2rad(const["antenna.gainWidth"][0]) # Ширина диаграммы направленности в радианах
+        gane_width = np.deg2rad(const["antenna"]["gainWidth"][0]) # Ширина диаграммы направленности в радианах
         self.gamma = 2*np.sin(gane_width/2)**2/np.log(2)
         F = 0.5
         sigmaxx = const["surface"]["sigmaxx"][0]
         sigmayy = const["surface"]["sigmayy"][0]
         print(sigmaxx)
-        self.sigma =  F**2/( 2*np.cos(self.theta)**4 * np.sqrt(sigmaxx * sigmayy) ) * np.exp(np.tan(self.theta)/(2*sigmaxx))
+        # self.sigma =  F**2/( 2*np.cos(self.theta)**4 * np.sqrt(sigmaxx * sigmayy) ) * np.exp(np.tan(self.theta)/(2*sigmaxx))
         # print(np.sum(self.sigma))
 
         gridsize = const["surface"]["gridSize"][0]
@@ -57,17 +58,31 @@ class Pulse():
         return self.theta0
 
 
-    def G0(self, r, R, Rabs, xi=0, phi=0, G0=1,):
+    def G0(self, xi=0, phi=0, G0=1,):
             # G -- диаграмма направленности
             # theta -- угол падения
+            # phi = const["antenna"]["polarAngle"]
+
+
             xi = np.deg2rad(xi)
             phi = np.deg2rad(phi)
-            rho = np.sqrt(np.sum(self.r**2,axis=0))
-            phi = np.arccos(R[0,:]/rho) - phi
 
-            theta = (R[-1,:]*np.cos(xi) + rho*np.sin(xi)*np.cos(phi))
-            theta*=1/Rabs
+            X = self.R[0,:] * np.cos(phi) + self.R[1,:] * np.sin(phi)
+            Y = self.R[0,:] * np.sin(phi) - self.R[1,:] * np.cos(phi)
+            Z = self.z0
+
+            rho = np.sqrt(X**2 + Y**2)
+            phi = np.arccos(X/rho) 
+
+
+            Rabs = np.sqrt(X**2 + Y**2 + Z**2)
+
+            theta = (Z*np.cos(xi) + rho*np.sin(xi)*np.cos(phi))
+            theta *= 1/Rabs
             theta = np.arccos(theta)
+
+
+
             return G0*np.exp(-2/self.gamma * np.sin(theta)**2)
     
     def G(self, theta, G0=1):
@@ -192,9 +207,9 @@ if __name__ == "__main__":
     with open("rc.json", "r") as f:
         const = load(f)
 
-    const["surface.x"][0] = 5000
-    xmax = const["surface.x"][0]
-    gridsize = const["surface.gridSize"][0] * 2
+    const["surface"]["x"][0] = 125e3
+    xmax = const["surface"]["x"][0]
+    gridsize = const["surface"]["gridSize"][0] 
     x0 = np.linspace(-xmax, xmax, gridsize)  
     y0 = np.linspace(-xmax, xmax, gridsize)
 
@@ -206,19 +221,26 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots()
     pulse = Pulse(surface, x, y, const, )
+    G = np.zeros(gridsize*gridsize)
 
-    timp = const["antenna.impulseDuration"][0]
-    t = np.linspace(-1*timp, 4*timp, 512)
-    P = np.zeros(t.size)
-    theta = pulse.theta
+    for xi in np.arange(-17, 17, 1.4):
+        G += pulse.G0(phi = 90, xi = xi)
+    plt.contourf(x,y,G.reshape((gridsize,gridsize)))
+    # timp = const["antenna"]["impulseDuration"][0]
 
-    for i in range(t.size):
-        P[i] = pulse.power1(t[i])
+
+    # t = np.linspace(-1*timp, 4*timp, 512)
+    # P = np.zeros(t.size)
+    # theta = pulse.theta
+
+    # for i in range(t.size):
+    #     P[i] = pulse.power1(t[i])
     # fig, ax = plt.subplots(subplot_kw=dict(projection='polar'))
     # pulse = Pulse(surface, r*np.cos(phi), r*np.sin(phi), const, )
     # theta0 = pulse.G(pulse.theta)
     # im = ax.contourf(phi, r, theta0.reshape(x.shape))
 
-    plt.plot(t,P)
 
-    plt.show()
+    plt.savefig("G0")
+
+    # plt.show()

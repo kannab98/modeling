@@ -14,7 +14,7 @@ with open("rc.json", "r", encoding='utf-8') as f:
 
 grid_size = const["surface"]["gridSize"][0] 
 c = const["constants"]["lightSpeed"][0]
-z0 = const["antenna.z"][0]
+z0 = const["antenna"]["z"][0]
 
 
 
