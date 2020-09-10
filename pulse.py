@@ -41,8 +41,14 @@ class Pulse():
         gane_width = np.deg2rad(const["antenna.gainWidth"][0]) # Ширина диаграммы направленности в радианах
         self.gamma = 2*np.sin(gane_width/2)**2/np.log(2)
         F = 0.5
-        # self.sigma =  F**2/( 2*np.cos(self.theta0)**4 * np.sqrt(sigmaxx *
-        #     sigmayy) ) * np.exp(np.tan(self.theta0/(2 * sigmaxx))
+        sigmaxx = const["surface"]["sigmaxx"][0]
+        sigmayy = const["surface"]["sigmayy"][0]
+        print(sigmaxx)
+        self.sigma =  F**2/( 2*np.cos(self.theta)**4 * np.sqrt(sigmaxx * sigmayy) ) * np.exp(np.tan(self.theta)/(2*sigmaxx))
+        # print(np.sum(self.sigma))
+
+        gridsize = const["surface"]["gridSize"][0]
+        # self.sigma = self.sigma.reshape((gridsize, gridsize))
     
     def main(self):
         # self.theta  = self.theta_calc(self.R, self.Rabs)

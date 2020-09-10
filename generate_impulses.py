@@ -22,14 +22,16 @@ z0 = const["antenna.z"][0]
 
 surface = Surface(const)
 host_constants = surface.export()
-print(host_constants[-1].shape)
-print(host_constants[-1])
+# print(host_constants[-1].shape)
+# print(host_constants[-1])
 stream = cuda.stream()
 k, phi, A, F, psi = (cuda.to_device(host_constants[i], stream = stream) for i in range(len(host_constants)))
 
 
 Hs = 4 * np.sqrt(surface.sigma_sqr)
 xmax = 4 * np.sqrt(Hs * z0)
+
+# xmax = const["surface"]["x"][0]
 print(xmax)
 
 x0 = np.linspace(-xmax, xmax, grid_size)
@@ -41,7 +43,7 @@ y0 = y0.flatten()
 
 threadsperblock = TPB 
 blockspergrid = math.ceil(x0.size / threadsperblock)
-kernels = [kernel_default, kernel_cwm]
+kernels = [kernel_default]
 labels = ["default", "cwm"] 
 fig, ax = plt.subplots()
 
@@ -66,18 +68,29 @@ for j, kernel in enumerate(kernels):
     T = np.linspace(T0-Hs/c, np.sqrt(z0**2+xmax**2)/c, 104)
     P = np.zeros(T.size)
 
+
+    (  
+        const["surface"]["mean"][0], 
+        const["surface"]["sigmaxx"][0], 
+        const["surface"]["sigmayy"][0]
+    ) \
+    = surface.get_moments(x0,y0,surf)
+
     pulse = Pulse(surf, x0, y0, const)
+    # plt.imshow(pulse.sigma)
+    # plt.savefig("sigma")
+    print(pulse.sigma)
 
-    index = pulse.mirror_sort()
-    for i in range(T.size):
-        P[i] = pulse.power1(T[i])
+    # index = pulse.mirror_sort()
+    # for i in range(T.size):
+        # P[i] = pulse.power1(T[i])
 
 
-    dT = pd.Series(T - T0, name = 't_%s' % (labels[j]))
-    dP = pd.Series(P/P.max(), name = 'P_%s' % (labels[j]))
-    data_p = pd.concat([data_p, dT, dP], axis=1)
+    # dT = pd.Series(T - T0, name = 't_%s' % (labels[j]))
+    # dP = pd.Series(P/P.max(), name = 'P_%s' % (labels[j]))
+    # data_p = pd.concat([data_p, dT, dP], axis=1)
 
-    ax.plot(T-T0, P/P.max(), label = labels[j])
+    # ax.plot(T-T0, P/P.max(), label = labels[j])
 
 
 
@@ -85,21 +98,21 @@ for j, kernel in enumerate(kernels):
 
 now = datetime.datetime.now().strftime("%m%d_%H%M")
 os.mkdir(str(now))
-data_p = pd.DataFrame(data_p)
+# data_p = pd.DataFrame(data_p)
 
 
 
 
-ax.set_xlabel('t')
-ax.set_ylabel('P')
-plt.legend()
-plt.savefig('%s/impulse.png' % (now))
+# ax.set_xlabel('t')
+# ax.set_ylabel('P')
+# plt.legend()
+# plt.savefig('%s/impulse.png' % (now))
 
-data_p.to_csv('%s/impulse.csv' % (now), index = False, sep=';')
+# data_p.to_csv('%s/impulse.csv' % (now), index = False, sep=';')
 
 
 with open('%s/rc.json' % (now), 'w', encoding="utf-8") as f:
     dump(const, f, indent=4)
 
 
-plt.show()
+# plt.show()

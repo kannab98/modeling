@@ -91,7 +91,7 @@
 
         "gridSize":
             [
-                100,
+                1024,
                 "int",
                 "Количество точек на сетке"
             ],
@@ -136,6 +136,27 @@
                 20170,
                 "int",
                 "Безразмерный разгон"
+            ],
+
+        "mean":
+            [
+                null,
+                "null or float",
+                ""
+            ],
+
+        "sigmaxx":
+            [
+                null,
+                "null or float",
+                ""
+            ],
+
+        "sigmayy":
+            [
+                null,
+                "null or float",
+                ""
             ]
         },
 

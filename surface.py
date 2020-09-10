@@ -15,6 +15,7 @@ class Surface(Spectrum):
         self.M = const["surface"]["phiSize"][0]
         random_phases = const["surface"]["randomPhases"][0]
         kfrag = "log"
+        self.grid_size = const["surface"]["gridSize"][0]
 
 
 
@@ -28,7 +29,7 @@ class Surface(Spectrum):
 
         self.direction = np.array(self.direction)
 
-        print(self.direction)
+        # print(self.direction)
 
         Spectrum.__init__(self, const)
         self.spectrum = self.get_spectrum()
@@ -311,6 +312,66 @@ class Surface(Spectrum):
                 self.cwm_x_dot += tmp * k[n]*np.cos(phi[m])**2
                 self.cwm_y_dot += tmp * k[n]*np.sin(phi[m])**2
         return [self.cwm_x_dot, self.cwm_y_dot]
+
+
+    def integrate(self, x, y, i, j):
+        dx = x[j] - x[i]
+        if np.abs(dx) < np.abs(0.01*x[j]):
+            integral = 0
+        else:
+            integral = (y[i] + y[j] )/2 * dx
+        return integral
+
+    def moment(self, x0, y0, surface, p=1):
+
+
+
+        grid_size = self.grid_size
+        x0 = x0.reshape((grid_size, grid_size))
+        y0 = y0.reshape((grid_size, grid_size))
+        z0 = surface.reshape((grid_size,grid_size))
+
+        S = np.zeros((grid_size-1, grid_size-1))
+        Z = np.zeros((grid_size-1, grid_size-1))
+
+        for m in range(grid_size-1):
+            for n in range(grid_size-1):
+                x = np.array([x0[i,j] for i in range(m,2+m) for j in range(n,n+2)])
+                y = np.array([y0[i,j] for i in range(m,2+m) for j in range(n,n+2)])
+                z = np.array([z0[i,j] for i in range(m,2+m) for j in range(n,n+2)])
+
+                walk = [0,2,3,1]
+
+                x = x[walk]
+                y = y[walk]
+                z = z[walk]
+
+                s = lambda i,j: self.integrate(x, y, i, j)
+                Z[m,n] = np.mean(z)
+                S[m,n] = np.abs(+ s(0,1) + s(1,2) + s(2,3)  + s(3,1))
+
+        return (np.sum(S*Z**p)/np.sum(S))
+
+    def get_moments(self, x0, y0, surface):
+        moments = np.zeros(3)
+        params = ["mean", "sigmaxx", "sigmayy", ]
+        for i, param in enumerate(params):
+            if param == "mean":
+                # moments[i] = self.moment(x0, y0, surface[i], p=1)
+                # print(moments[i], "1")
+                moments[i] = np.mean(surface[i])
+                # print(moments[i], "2")
+            else:
+                # moments[i] = np.abs(self.moment(x0, y0, surface[i], p=2) -  moments[0]**2 )
+                # print(moments[i], "3")
+                moments[i] = np.std(surface[i])**2 
+                # print(moments[i], "4")
+
+        return moments
+            
+
+
+
 
 
 if __name__ == "__main__":
