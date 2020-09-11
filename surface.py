@@ -1,10 +1,75 @@
 import numpy as np
 from numpy import pi
-from scipy import interpolate,integrate
+from scipy import interpolate, integrate
+
 from tqdm import tqdm
 from spectrum import Spectrum
 
 
+try:
+    from numba import cuda
+    from multiprocessing import Process, Array
+except:
+    print("CUDA not installed")
+import math
+
+TPB=16
+@cuda.jit
+def kernel_cwm(ans, x, y, k, phi, A, F, psi):
+    i = cuda.grid(1)
+
+    if i >= x.shape[0]:
+        return
+
+    for n in range(k.size): 
+        for m in range(phi.size):
+                kr = k[n]*(x[i]*math.cos(phi[m]) + y[i]*math.sin(phi[m]))      
+                Af = A[n] * F[n][m]
+                Cos =  math.cos(kr + psi[n][m]) * Af
+                Sin =  math.sin(kr + psi[n][m]) * Af
+
+                kx = k[n] * math.cos(phi[m])
+                ky = k[n] * math.sin(phi[m])
+
+
+                # Высоты (z)
+                ans[0,i] +=  Cos 
+                # Наклоны X (dz/dx)
+                ans[1,i] +=  -Sin * kx
+                # Наклоны Y (dz/dy)
+                ans[2,i] +=  -Sin * ky
+
+                # CWM
+                x[i] += -Sin * math.cos(phi[m])
+                y[i] += -Sin * math.sin(phi[m])
+                ans[1,i] *= 1 - Cos * math.cos(phi[m]) * kx
+                ans[2,i] *= 1 - Cos * math.sin(phi[m]) * ky
+
+
+@cuda.jit
+def kernel_default(ans, x, y, k, phi, A, F, psi):
+    i = cuda.grid(1)
+
+    if i >= x.shape[0]:
+        return
+
+    for n in range(k.size): 
+        for m in range(phi.size):
+                kr = k[n]*(x[i]*math.cos(phi[m]) + y[i]*math.sin(phi[m]))      
+                Af = A[n] * F[n][m]
+                Cos =  math.cos(kr + psi[n][m]) * Af
+                Sin =  math.sin(kr + psi[n][m]) * Af
+
+                kx = k[n] * math.cos(phi[m])
+                ky = k[n] * math.sin(phi[m])
+
+
+                # Высоты (z)
+                ans[0,i] +=  Cos 
+                # Наклоны X (dz/dx)
+                ans[1,i] +=  -Sin * kx
+                # Наклоны Y (dz/dy)
+                ans[2,i] +=  -Sin * ky
 
 
 class Surface(Spectrum):
@@ -70,8 +135,9 @@ class Surface(Spectrum):
 
         # for i, spectrum in enumerate(self.spectrum):
         spectrum = self.spectrum
+
         self.A = self.amplitude(self.k, spectrum)
-        self.F = self.angle(self.k,self.phi, direction=self.direction[0])
+        self.F = self.angle(self.k, self.phi, direction=self.direction[0])
 
         self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
             # if i == 0:
@@ -136,183 +202,6 @@ class Surface(Spectrum):
 
     def export(self):
         return self.k, self.phi, self.A, self.F, self.psi
-
-    def Surface_space(self,r):
-        N = self.N
-        M= self.M
-        k = self.k
-        phi = self.phi
-        A = self.A
-        F = self.F
-        psi = self.psi
-        self.surface = [0 for i in range(A.shape[0])]
-        # print(A.shape[0])
-        progress_bar = tqdm( total = A.shape[0]*N*M,  leave = False , desc="Surface calc")
-        for s in range(A.shape[0]):
-            for n in range(N):
-                for m in range(M):
-                    kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
-                    tmp = A[s][n] * \
-                        np.cos( kr + psi[s][n][m]) * F[s][n][m]
-
-                    progress_bar.update(1)
-                    self.surface[s] += tmp
-            # print(self.surface.shape)
-            # print(self.surface)
-
-
-        progress_bar.close()
-        progress_bar.clear()
-        heights = self.surface
-        return heights
-
-    def Surface_time(self,t):
-        N = self.N
-        M= self.M
-        k = self.k
-        A = self.A
-        F = self.F
-        psi = self.psi
-        self.surface = 0
-        progress_bar = tqdm( total = N*M,  leave = False , desc="Surface calc")
-        for n in range(N):
-            for m in range(M):
-                tmp = A[n] * \
-                    np.cos(
-                        +psi[n][m]
-                        +self.omega_k(k[n])*t) \
-                        * F[n][m]
-
-
-                self.surface += tmp
-
-                progress_bar.update(1)
-        progress_bar.close()
-        progress_bar.clear()
-        heights = self.surface
-        return heights
-
-    def surfaces_band(self,r,t):
-        N = self.N
-        M= self.M
-        k = self.k
-        phi = self.phi
-        A = self.A
-        F = self.F
-        psi = self.psi
-
-        s = 0
-        s_xx = 0
-        s_yy = 0
-
-        s1 = 0
-        s_xx1 = 0
-        s_yy1 = 0
-
-        progress_bar = tqdm( total = N*M,  leave = False )
-
-        for n in range(N):
-            for m in range(M):
-                kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
-                tmp = A[n] * \
-                    np.cos(
-                        +kr
-                        +psi[n][m]
-                        +self.omega_k(k[n])*t) \
-                        * F[n][m]
-
-                tmp1 = -A[n] * \
-                    np.sin(
-                        +kr
-                        +psi[n][m]
-                        +self.omega_k(k[n])*t) \
-                        * F[n][m]
-
-                if k[n] <= self.k_c.max():
-                    s += tmp
-                    s_xx += k[n]*np.cos(phi[m])*tmp1
-                    s_yy += k[n]*np.sin(phi[m])*tmp1
-
-                else :
-                    s1 += tmp
-                    s_xx1 += k[n]*np.cos(phi[m])*tmp1
-                    s_yy1 += k[n]*np.sin(phi[m])*tmp1
-
-                progress_bar.update(1)
-        progress_bar.close()
-        progress_bar.clear()
-        band_c = [s, s_xx, s_yy]
-        band_ku = [s+s1, s_xx + s_xx1, s_yy + s_yy1]
-        return band_c, band_ku
-
-    def choppy_wave_space(self, r):
-        N = self.N
-        M= self.M
-        k = self.k
-        phi = self.phi
-        A = self.A
-        F = self.F
-        psi = self.psi
-
-        self.cwm_x = 0
-        self.cwm_y = 0
-
-        for n in range(N):
-            for m in range(M):
-                kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
-                tmp = -A[n] * \
-                    np.sin(
-                        +kr
-                        +psi[n][m]) \
-                        * F[n][m]
-
-                self.cwm_x += tmp * np.cos(phi[m])
-                self.cwm_y += tmp * np.sin(phi[m])
-        return [self.cwm_x, self.cwm_y]
-
-
-    def choppy_wave_time(self, t):
-        N = self.N
-        M= self.M
-        k = self.k
-        A = self.A
-        F = self.F
-        psi = self.psi
-
-        self.cwm_t = 0
-        for n in range(N):
-            for m in range(M):
-                tmp = -A[n] *  np.sin( self.omega_k(k[n])*t  +psi[n][m])  * F[n][m]
-                self.cwm_t += tmp
-
-        return self.cwm_t
-
-
-    def choppy_wave_jac(self, r, t):
-        N = self.N
-        M= self.M
-        k = self.k
-        phi = self.phi
-        A = self.A
-        F = self.F
-        psi = self.psi
-
-        self.cwm_x_dot = 0
-        self.cwm_y_dot = 0
-        for n in range(N):
-            for m in range(M):
-                kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
-                tmp = -A[n] * \
-                    np.cos(
-                        +kr
-                        +psi[n][m]
-                        +self.omega_k(k[n])*t) \
-                        * F[n][m]
-
-                self.cwm_x_dot += tmp * k[n]*np.cos(phi[m])**2
-                self.cwm_y_dot += tmp * k[n]*np.sin(phi[m])**2
-        return [self.cwm_x_dot, self.cwm_y_dot]
-
 
     def integrate(self, x, y, i, j):
         dx = x[j] - x[i]
@@ -412,41 +301,56 @@ if __name__ == "__main__":
     X, Y = np.meshgrid(x, y)
     surface = Surface(const)
 
+    host_constants = surface.export()
+
+
+    def init_kernel(kernel, arr):
+        cuda_constants = (cuda.to_device(host_constants[i]) for i in range(len(host_constants)))
+        threadsperblock = TPB 
+        blockspergrid = math.ceil(X.size / threadsperblock)
+        kernel[blockspergrid, threadsperblock](arr, X, Y, *cuda_constants)
+
 
     if args["spaceplot"]:
-        Heights = surface.Surface_space([X,Y])
-        for heights in Heights:
-            fig,ax = plt.subplots()
-            mappable = ax.contourf(X,Y,heights, levels=100)
-            ax.set_xlabel("$x,$ м")
-            ax.set_ylabel("$y,$ м")
-            bar = fig.colorbar(mappable=mappable,ax=ax)
-            bar.set_label("высота, м")
+
+        X = X.flatten()
+        Y = Y.flatten()
+
+        kernels = [kernel_cwm]
+        fig, ax = plt.subplots()
 
 
-            ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
-            ax.text(0.05,0.95,
-                '\n'.join((
-                        '$\\sigma^2_s=%.2f$' % (np.std(heights)**2),
-                        '$\\langle z \\rangle = %.2f$' % (np.mean(heights)),
-                )),
-                verticalalignment='top',transform=ax.transAxes,)
-
-    if args["timeplot"]:
-            heights = surface.Surface_time(t)
-            fig,ax = plt.subplots()
-            ax.plot(t,heights)
-            ax.set_xlabel("$t,$ с")
-            ax.set_ylabel("высота, м")
-
-            ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
-            ax.text(0.05,0.95,
-                '\n'.join((
-                        '$\\sigma^2_s=%.2f$' % (np.std(heights)**2),
-                        '$\\langle z \\rangle = %.2f$' % (np.mean(heights)),
-                )),
-                verticalalignment='top',transform=ax.transAxes,)
+        for j, kernel in enumerate(kernels):
+            # Create shared array
+            arr_share = Array('d', 3*X.size )
+            # arr_share and arr share the same memory
+            arr = np.frombuffer(arr_share.get_obj()) 
+            arr = arr.reshape((3, X.size)) 
+            p = Process(target = init_kernel, args = (kernel, arr) )
+            p.start()
+            # wait until process funish
+            p.join()
 
 
+        fig, ax = plt.subplots()
+        surf = arr[0].reshape((grid_size, grid_size))
+        X = X.reshape((grid_size, grid_size))
+        Y = Y.reshape((grid_size, grid_size))
+        mappable = ax.contourf(X,Y,surf, levels=100)
+        ax.set_xlabel("$x,$ м")
+        ax.set_ylabel("$y,$ м")
+        bar = fig.colorbar(mappable=mappable,ax=ax)
+        bar.set_label("высота, м")
+
+
+        ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
+        ax.text(0.05,0.95,
+            '\n'.join((
+                    '$\\sigma^2_s=%.2f$' % (np.std(surf)**2),
+                    '$\\langle z \\rangle = %.2f$' % (np.mean(surf)),
+            )),
+            verticalalignment='top',transform=ax.transAxes,)
+
+        plt.savefig("kek")
 
     plt.show()

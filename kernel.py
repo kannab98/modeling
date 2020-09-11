@@ -3,8 +3,6 @@ import numpy as np
 import math
 
 TPB=16
-
-
 @cuda.jit
 def kernel_cwm(ans, x, y, k, phi, A, F, psi):
     i = cuda.grid(1)
