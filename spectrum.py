@@ -3,14 +3,22 @@ from scipy import interpolate, integrate
 
 class Spectrum:
     def __init__(self, const):
-        self.U10 = const["wind"]["speed"][0]
-        self.U10_swell = const["swell"]["speed"][0]
+
         x = const["surface"]["nonDimWindFetch"][0]
         self.band = const["band"][0]
         KT = const["surface"]["kEdge"][0]
         self.g = const["constants"]["gravityAcceleration"][0]
         self.swell = const["swell"]["enable"][0]
         self.wind_waves = const["wind"]["enable"][0]
+
+
+
+        if self.wind_waves:
+            self.U10 = const["wind"]["speed"][0]
+
+        else:
+            self.U10 = const["swell"]["speed"][0]
+            self.U10_swell = const["swell"]["speed"][0]
 
 
         # коэффициент gamma (см. спектр JONSWAP)
@@ -52,13 +60,14 @@ class Spectrum:
 
     def get_spectrum(self, ):
         # интерполируем смоделированный спектр
-
         if self.wind_waves:
             self.spectrum = self.interpolate(self.full_spectrum)
-
             self.sigma_sqr = np.trapz(self.spectrum(self.k0), self.k0)
-        # if self.swell:
-        #     self.spectrum.append(self.interpolate(self.swell_spectrum))
+            print("plot wind surface")
+
+        if self.swell:
+            self.spectrum = self.interpolate(self.swell_spectrum)
+            print("plot swell surface")
 
         return self.spectrum
 
@@ -198,7 +207,6 @@ class Spectrum:
     
     def swell_spectrum(self, k):
         
-        print(self.U10_swell)
         omega_m = self.Omega(20170) * self.g/self.U10_swell
         W = np.power(omega_m/self.omega_k(k), 5)
 

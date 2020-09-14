@@ -9,74 +9,131 @@ from spectrum import Spectrum
 try:
     from numba import cuda
     from multiprocessing import Process, Array
+    GPU = True
 except:
     print("CUDA not installed")
+    GPU = False 
 import math
 
 TPB=16
-@cuda.jit
-def kernel_cwm(ans, x, y, k, phi, A, F, psi):
-    i = cuda.grid(1)
+if GPU:
+    @cuda.jit
+    def kernel_cwm(ans, x, y, k, phi, A, F, psi):
+        i = cuda.grid(1)
 
-    if i >= x.shape[0]:
-        return
+        if i >= x.shape[0]:
+            return
 
-    for n in range(k.size): 
-        for m in range(phi.size):
-                kr = k[n]*(x[i]*math.cos(phi[m]) + y[i]*math.sin(phi[m]))      
-                Af = A[n] * F[n][m]
-                Cos =  math.cos(kr + psi[n][m]) * Af
-                Sin =  math.sin(kr + psi[n][m]) * Af
+        for n in range(k.size): 
+            for m in range(phi.size):
+                    kr = k[n]*(x*math.cos(phi[m]) + y*math.sin(phi[m]))      
+                    Af = A[n] * F[n][m]
+                    Cos =  math.cos(kr + psi[n][m]) * Af
+                    Sin =  math.sin(kr + psi[n][m]) * Af
 
-                kx = k[n] * math.cos(phi[m])
-                ky = k[n] * math.sin(phi[m])
-
-
-                # Высоты (z)
-                ans[0,i] +=  Cos 
-                # Наклоны X (dz/dx)
-                ans[1,i] +=  -Sin * kx
-                # Наклоны Y (dz/dy)
-                ans[2,i] +=  -Sin * ky
-
-                # CWM
-                x[i] += -Sin * math.cos(phi[m])
-                y[i] += -Sin * math.sin(phi[m])
-                ans[1,i] *= 1 - Cos * math.cos(phi[m]) * kx
-                ans[2,i] *= 1 - Cos * math.sin(phi[m]) * ky
+                    kx = k[n] * math.cos(phi[m])
+                    ky = k[n] * math.sin(phi[m])
 
 
-@cuda.jit
-def kernel_default(ans, x, y, k, phi, A, F, psi):
-    i = cuda.grid(1)
+                    # Высоты (z)
+                    ans[0,i] +=  Cos 
+                    # Наклоны X (dz/dx)
+                    ans[1,i] +=  -Sin * kx
+                    # Наклоны Y (dz/dy)
+                    ans[2,i] +=  -Sin * ky
 
-    if i >= x.shape[0]:
-        return
-
-    for n in range(k.size): 
-        for m in range(phi.size):
-                kr = k[n]*(x[i]*math.cos(phi[m]) + y[i]*math.sin(phi[m]))      
-                Af = A[n] * F[n][m]
-                Cos =  math.cos(kr + psi[n][m]) * Af
-                Sin =  math.sin(kr + psi[n][m]) * Af
-
-                kx = k[n] * math.cos(phi[m])
-                ky = k[n] * math.sin(phi[m])
+                    # CWM
+                    x += -Sin * math.cos(phi[m])
+                    y += -Sin * math.sin(phi[m])
+                    ans[1,i] *= 1 - Cos * math.cos(phi[m]) * kx
+                    ans[2,i] *= 1 - Cos * math.sin(phi[m]) * ky
 
 
-                # Высоты (z)
-                ans[0,i] +=  Cos 
-                # Наклоны X (dz/dx)
-                ans[1,i] +=  -Sin * kx
-                # Наклоны Y (dz/dy)
-                ans[2,i] +=  -Sin * ky
+    @cuda.jit
+    def kernel_default(ans, x, y, k, phi, A, F, psi):
+        i = cuda.grid(1)
+
+        if i >= x.shape[0]:
+            return
+
+        for n in range(k.size): 
+            for m in range(phi.size):
+                    kr = k[n]*(x[i]*math.cos(phi[m]) + y[i]*math.sin(phi[m]))      
+                    Af = A[n] * F[n][m]
+                    Cos =  math.cos(kr + psi[n][m]) * Af
+                    Sin =  math.sin(kr + psi[n][m]) * Af
+
+                    kx = k[n] * math.cos(phi[m])
+                    ky = k[n] * math.sin(phi[m])
+
+
+                    # Высоты (z)
+                    ans[0,i] +=  Cos 
+                    # Наклоны X (dz/dx)
+                    ans[1,i] +=  -Sin * kx
+                    # Наклоны Y (dz/dy)
+                    ans[2,i] +=  -Sin * ky
+
+else:
+    def kernel_cwm(ans, x, y, k, phi, A, F, psi):
+        for n in range(k.size): 
+            for m in range(phi.size):
+                    kr = k[n]*(x*math.cos(phi[m]) + y*math.sin(phi[m]))      
+                    Af = A[n] * F[n][m]
+                    Cos =  math.cos(kr + psi[n][m]) * Af
+                    Sin =  math.sin(kr + psi[n][m]) * Af
+
+                    kx = k[n] * math.cos(phi[m])
+                    ky = k[n] * math.sin(phi[m])
+
+
+                    # Высоты (z)
+                    ans[0,i] +=  Cos 
+                    # Наклоны X (dz/dx)
+                    ans[1,i] +=  -Sin * kx
+                    # Наклоны Y (dz/dy)
+                    ans[2,i] +=  -Sin * ky
+
+                    # CWM
+                    x += -Sin * math.cos(phi[m])
+                    y += -Sin * math.sin(phi[m])
+                    ans[1,i] *= 1 - Cos * math.cos(phi[m]) * kx
+                    ans[2,i] *= 1 - Cos * math.sin(phi[m]) * ky
+
+        return ans,x,y
+
+    def kernel_default(ans, x, y, k, phi, A, F, psi):
+        for n in range(k.size): 
+            for m in range(phi.size):
+                    kr = k[n]*(x*math.cos(phi[m]) + y*math.sin(phi[m]))      
+                    Af = A[n] * F[n][m]
+                    Cos =  math.cos(kr + psi[n][m]) * Af
+                    Sin =  math.sin(kr + psi[n][m]) * Af
+
+                    kx = k[n] * math.cos(phi[m])
+                    ky = k[n] * math.sin(phi[m])
+
+
+                    # Высоты (z)
+                    ans[0,i] +=  Cos 
+                    # Наклоны X (dz/dx)
+                    ans[1,i] +=  -Sin * kx
+                    # Наклоны Y (dz/dy)
+                    ans[2,i] +=  -Sin * ky
+
+        return ans,x,y
+
 
 
 def init_kernel(kernel, arr, X, Y, host_constants):
-    cuda_constants = (cuda.to_device(host_constants[i]) for i in range(len(host_constants)))
-    threadsperblock = TPB 
-    blockspergrid = math.ceil(X.size / threadsperblock)
-    kernel[blockspergrid, threadsperblock](arr, X, Y, *cuda_constants)
+    if GPU:
+        cuda_constants = (cuda.to_device(host_constants[i]) for i in range(len(host_constants)))
+        threadsperblock = TPB 
+        blockspergrid = math.ceil(X.size / threadsperblock)
+        kernel[blockspergrid, threadsperblock](arr, X, Y, *cuda_constants)
+    else:
+        kernel(arr, X, Y, host_constants)
+
 
 
 def run_kernels(kernels,  X, Y, host_constants):
@@ -174,19 +231,11 @@ class Surface(Spectrum):
         self.A = self.amplitude(self.k, spectrum)
         self.F = self.angle(self.k, self.phi, direction=self.direction[0])
 
-        self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
-            # if i == 0:
-                # self.A = np.array([A])
-                # self.F = np.array([F])
-            # else:
-                # self.A = np.vstack((self.A, np.array([A])))
-                # self.F = np.vstack((self.F, np.array([F])))
 
-
-        # if random_phases:
-        #     self.psi = np.random.uniform(0, 2*pi, size=(self.direction.size, self.N, self.M))
-        # else:
-        #     self.psi = np.random.uniform(0, 2*pi, size=(self.direction.size, self.N, self.M))
+        if random_phases:
+            self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
+        else:
+            self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
 
 
 
@@ -247,8 +296,6 @@ class Surface(Spectrum):
         return integral
 
     def moment(self, x0, y0, surface, p=1):
-
-
 
         grid_size = self.grid_size
         x0 = x0.reshape((grid_size, grid_size))
@@ -318,8 +365,9 @@ if __name__ == "__main__":
         const = load(f)
 
     if not args["spaceplot"] and not args["timeplot"]:
-            ap.print_help()
-            sys.exit(1)
+            # ap.print_help()
+            # sys.exit(1)
+            pass
 
     x_size = const["surface"]["x"][0]
     y_size = const["surface"]["y"][0]
@@ -341,12 +389,11 @@ if __name__ == "__main__":
 
 
 
-    if args["spaceplot"]:
 
-        kernels = [kernel_default, kernel_cwm]
+    # if args["spaceplot"]:
+    if True:
+        kernels = [kernel_default]
         labels = ["default", "cwm"] 
-
-
 
         process = [ None for i in range( len(kernels) )]
         arr = [ None for i in range( len(kernels) )]
@@ -366,7 +413,7 @@ if __name__ == "__main__":
             np.copyto(Y0[j], Y.flatten())
 
 
-            process[j] = Process(target = init_kernel, args = (kernel, arr[j], X0[j], Y0[j]) )
+            process[j] = Process(target = init_kernel, args = (kernel, arr[j], X0[j], Y0[j], host_constants))
             process[j].start()
         
 
@@ -380,7 +427,6 @@ if __name__ == "__main__":
 
         fig1d, ax1d = plt.subplots()
         for i in range(len(kernels)):
-            print(kernels[i])
             fig, ax = plt.subplots()
             surf = arr[i][0].reshape((grid_size, grid_size))
             x = X0[i].reshape((grid_size, grid_size))
