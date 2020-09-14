@@ -1,5 +1,6 @@
 from kernel import *
 from surface import Surface
+import surface as srf
 import datetime
 
 import pandas as pd
@@ -7,6 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from pulse import Pulse
+import numpy.random as rnd
+
 
 from json import load, dump
 with open("rc.json", "r", encoding='utf-8') as f:
@@ -16,71 +19,65 @@ grid_size = const["surface"]["gridSize"][0]
 c = const["constants"]["lightSpeed"][0]
 z0 = const["antenna"]["z"][0]
 
-
-
-
-
 surface = Surface(const)
 host_constants = surface.export()
-# print(host_constants[-1].shape)
-# print(host_constants[-1])
-stream = cuda.stream()
-k, phi, A, F, psi = (cuda.to_device(host_constants[i], stream = stream) for i in range(len(host_constants)))
 
-
-Hs = 4 * np.sqrt(surface.sigma_sqr)
-xmax = 4 * np.sqrt(Hs * z0)
-
+xmax = 5000
 # xmax = const["surface"]["x"][0]
-print(xmax)
-
-x0 = np.linspace(-xmax, xmax, grid_size)
-y0 = np.linspace(-xmax, xmax, grid_size)
+ymax = 5000
+x0 = np.linspace(0, xmax, grid_size)
+y0 = np.linspace(0, ymax, grid_size)
 x0, y0 = np.meshgrid(x0,y0)
 x0 = x0.flatten()
 y0 = y0.flatten()
 
 
-threadsperblock = TPB 
-blockspergrid = math.ceil(x0.size / threadsperblock)
-kernels = [kernel_default]
-labels = ["default", "cwm"] 
+
+xi = np.deg2rad(np.linspace(-17, 17))
+
+
+F = 0.5
+
+kernels = [srf.kernel_default, srf.kernel_cwm]
+sigma = np.zeros((len(kernels),xi.size))
+
+
 fig, ax = plt.subplots()
 
 
-data_p = pd.Series(dtype='object')
-data_s = {}
-data_m = pd.Series(dtype='object')
+for i in range(xi.size):
 
-mn = []
-disp = []
-
-T0 = (z0 - 5)/c
-
-for j, kernel in enumerate(kernels):
+    Surf, X, Y = srf.run_kernels(kernels, x0, y0, host_constants)
+    for j in range(len(kernels)):
+        surf = Surf[j]
+        x0 = X[j]
+        y0 = Y[j]
 
 
-    surf = np.zeros((3, x0.size))
-    stream = cuda.stream()
-    kernel[blockspergrid, threadsperblock, stream](surf, x0, y0, k, phi, A, F, psi)
+        const["antenna"]["deviation"][0] = xi[i]
 
 
-    T = np.linspace(T0-Hs/c, np.sqrt(z0**2+xmax**2)/c, 104)
-    P = np.zeros(T.size)
 
+        (  
+            const["surface"]["mean"][0], 
+            const["surface"]["sigmaxx"][0], 
+            const["surface"]["sigmayy"][0]
+        ) \
+        = surface.get_moments(x0,y0,surf) 
 
-    (  
-        const["surface"]["mean"][0], 
-        const["surface"]["sigmaxx"][0], 
-        const["surface"]["sigmayy"][0]
-    ) \
-    = surface.get_moments(x0,y0,surf)
+        sigmaxx = const["surface"]["sigmaxx"][0]
+        sigmayy = const["surface"]["sigmayy"][0]
 
-    pulse = Pulse(surf, x0, y0, const)
-    # plt.imshow(pulse.sigma)
-    # plt.savefig("sigma")
-    print(pulse.sigma)
+        pulse = Pulse(surf, x0, y0, const)
+        sigma[j][i] = pulse.cross_section(xi[i])
 
+        y0 += 5000
+
+    print(xi[i])
+
+ax.plot( np.rad2deg(xi), sigma[0] )
+ax.plot( np.rad2deg(xi), sigma[1] )
+plt.savefig("kek")
     # index = pulse.mirror_sort()
     # for i in range(T.size):
         # P[i] = pulse.power1(T[i])
@@ -96,8 +93,8 @@ for j, kernel in enumerate(kernels):
 
 
 
-now = datetime.datetime.now().strftime("%m%d_%H%M")
-os.mkdir(str(now))
+# now = datetime.datetime.now().strftime("%m%d_%H%M")
+# os.mkdir(str(now))
 # data_p = pd.DataFrame(data_p)
 
 
@@ -111,8 +108,8 @@ os.mkdir(str(now))
 # data_p.to_csv('%s/impulse.csv' % (now), index = False, sep=';')
 
 
-with open('%s/rc.json' % (now), 'w', encoding="utf-8") as f:
-    dump(const, f, indent=4)
+# with open('%s/rc.json' % (now), 'w', encoding="utf-8") as f:
+    # dump(const, f, indent=4)
 
 
 # plt.show()

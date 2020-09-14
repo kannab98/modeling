@@ -72,6 +72,41 @@ def kernel_default(ans, x, y, k, phi, A, F, psi):
                 ans[2,i] +=  -Sin * ky
 
 
+def init_kernel(kernel, arr, X, Y, host_constants):
+    cuda_constants = (cuda.to_device(host_constants[i]) for i in range(len(host_constants)))
+    threadsperblock = TPB 
+    blockspergrid = math.ceil(X.size / threadsperblock)
+    kernel[blockspergrid, threadsperblock](arr, X, Y, *cuda_constants)
+
+
+def run_kernels(kernels,  X, Y, host_constants):
+    process = [ None for i in range( len(kernels) )]
+    arr = [ None for i in range( len(kernels) )]
+    X0 = [ None for i in range( len(kernels) )]
+    Y0 = [ None for i in range( len(kernels) )]
+
+    for j, kernel in enumerate(kernels):
+        # Create shared array
+        arr_share = Array('d', 3*X.size )
+        X_share = Array('d', X.size)
+        Y_share = Array('d', Y.size)
+        # arr_share and arr share the same memory
+        arr[j] = np.frombuffer( arr_share.get_obj() ).reshape((3, X.size)) 
+        X0[j] = np.frombuffer( X_share.get_obj() )
+        Y0[j] = np.frombuffer( Y_share.get_obj() )
+        np.copyto(X0[j], X.flatten())
+        np.copyto(Y0[j], Y.flatten())
+
+        process[j] = Process(target = init_kernel, args = (kernel, arr[j], X0[j], Y0[j], host_constants) )
+        process[j].start()
+
+    for i in range(len(kernels)):
+        # wait until process funished
+        process[i].join()
+
+    return arr, X0, Y0
+
+
 class Surface(Spectrum):
     def __init__(self,const):
 
@@ -304,53 +339,73 @@ if __name__ == "__main__":
     host_constants = surface.export()
 
 
-    def init_kernel(kernel, arr):
-        cuda_constants = (cuda.to_device(host_constants[i]) for i in range(len(host_constants)))
-        threadsperblock = TPB 
-        blockspergrid = math.ceil(X.size / threadsperblock)
-        kernel[blockspergrid, threadsperblock](arr, X, Y, *cuda_constants)
 
 
     if args["spaceplot"]:
 
-        X = X.flatten()
-        Y = Y.flatten()
+        kernels = [kernel_default, kernel_cwm]
+        labels = ["default", "cwm"] 
 
-        kernels = [kernel_cwm]
-        fig, ax = plt.subplots()
 
+
+        process = [ None for i in range( len(kernels) )]
+        arr = [ None for i in range( len(kernels) )]
+        X0 = [ None for i in range( len(kernels) )]
+        Y0 = [ None for i in range( len(kernels) )]
 
         for j, kernel in enumerate(kernels):
             # Create shared array
             arr_share = Array('d', 3*X.size )
+            X_share = Array('d', X.size)
+            Y_share = Array('d', Y.size)
             # arr_share and arr share the same memory
-            arr = np.frombuffer(arr_share.get_obj()) 
-            arr = arr.reshape((3, X.size)) 
-            p = Process(target = init_kernel, args = (kernel, arr) )
-            p.start()
-            # wait until process funish
-            p.join()
+            arr[j] = np.frombuffer( arr_share.get_obj() ).reshape((3, X.size)) 
+            X0[j] = np.frombuffer( X_share.get_obj() )
+            Y0[j] = np.frombuffer( Y_share.get_obj() )
+            np.copyto(X0[j], X.flatten())
+            np.copyto(Y0[j], Y.flatten())
 
 
-        fig, ax = plt.subplots()
-        surf = arr[0].reshape((grid_size, grid_size))
-        X = X.reshape((grid_size, grid_size))
-        Y = Y.reshape((grid_size, grid_size))
-        mappable = ax.contourf(X,Y,surf, levels=100)
-        ax.set_xlabel("$x,$ м")
-        ax.set_ylabel("$y,$ м")
-        bar = fig.colorbar(mappable=mappable,ax=ax)
-        bar.set_label("высота, м")
+            process[j] = Process(target = init_kernel, args = (kernel, arr[j], X0[j], Y0[j]) )
+            process[j].start()
+        
 
 
-        ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
-        ax.text(0.05,0.95,
-            '\n'.join((
-                    '$\\sigma^2_s=%.2f$' % (np.std(surf)**2),
-                    '$\\langle z \\rangle = %.2f$' % (np.mean(surf)),
-            )),
-            verticalalignment='top',transform=ax.transAxes,)
 
-        plt.savefig("kek")
 
-    plt.show()
+        for i in range(len(kernels)):
+            # wait until process funished
+            process[i].join()
+        
+
+        fig1d, ax1d = plt.subplots()
+        for i in range(len(kernels)):
+            print(kernels[i])
+            fig, ax = plt.subplots()
+            surf = arr[i][0].reshape((grid_size, grid_size))
+            x = X0[i].reshape((grid_size, grid_size))
+            y = Y0[i].reshape((grid_size, grid_size))
+
+            mappable = ax.contourf(x, y,surf, levels=100)
+            ax.set_xlabel("$x,$ м")
+            ax.set_ylabel("$y,$ м")
+            bar = fig.colorbar(mappable=mappable, ax=ax)
+            bar.set_label("высота, м")
+
+            ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
+            ax.text(0.05,0.95,
+                '\n'.join((
+                        '$\\sigma^2_s=%.2f$' % (np.std(surf)**2),
+                        '$\\langle z \\rangle = %.2f$' % (np.mean(surf)),
+                )),
+                verticalalignment='top',transform=ax.transAxes,)
+
+            fig.savefig("%s" % (labels[i]))
+
+            ax1d.plot(x[0], surf[0])
+        
+        fig1d.savefig("compare")
+
+
+
+    # plt.show()

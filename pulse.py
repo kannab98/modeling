@@ -5,50 +5,49 @@ class Pulse():
         # if len(x.shape) < 2:
         #     self.x, self.y = np.meshgrid(x,y)
         # else:
-        self.x, self.y = x, y
+        # self.x, self.y = x, y
 
-        self.r = np.vstack((
-                            self.x.flatten(),
-                            self.y.flatten(),
-                            surface[0].flatten()
-                        ))
+        # self.r = np.vstack((
+        #                     self.x.flatten(),
+        #                     self.y.flatten(),
+        #                     surface[0].flatten()
+        #                 ))
 
-        self.z0 = const["antenna"]["z"][0] + surface[0].max()
-        r0 = [ const["antenna"]["x"][0], const["antenna"]["y"][0], const["antenna"]["z"][0]]
+        # self.z0 = const["antenna"]["z"][0] + surface[0].max()
+        # r0 = [ const["antenna"]["x"][0], const["antenna"]["y"][0], const["antenna"]["z"][0]]
 
-        self.r0 = np.vstack((
-                      +r0[0]*np.zeros(self.x.size),
-                      +r0[1]*np.zeros(self.y.size),
-                      -r0[2]*np.ones(surface[0].size)
-                    ))
+        # self.r0 = np.vstack((
+        #               +r0[0]*np.zeros(self.x.size),
+        #               +r0[1]*np.zeros(self.y.size),
+        #               -r0[2]*np.ones(surface[0].size)
+        #             ))
 
-        self.n = np.vstack((
-                        surface[1].flatten(),
-                        surface[2].flatten(),
-                        np.ones(surface[0].size)
-                    ))
+        # self.n = np.vstack((
+        #                 surface[1].flatten(),
+        #                 surface[2].flatten(),
+        #                 np.ones(surface[0].size)
+        #             ))
 
 
-        self.timp = const["antenna"]["impulseDuration"][0]
-        self.c =  const["constants"]["lightSpeed"][0]
-        self.R = self.r - self.r0
+        # self.timp = const["antenna"]["impulseDuration"][0]
+        # self.c =  const["constants"]["lightSpeed"][0]
+        # self.R = self.r - self.r0
 
-        self.Rabs = self.Rabs_calc(self.R)
-        self.Nabs = self.Nabs_calc(self.n)
-        self.theta = self.theta_calc(self.R, self.Rabs)
-        self.theta0 = self.theta0_calc(self.R, self.n, self.Rabs, self.Nabs)
+        # self.Rabs = self.Rabs_calc(self.R)
+        # self.Nabs = self.Nabs_calc(self.n)
+        # self.theta = self.theta_calc(self.R, self.Rabs)
+        # self.theta0 = self.theta0_calc(self.R, self.n, self.Rabs, self.Nabs)
 
-        #!$gane\_width \equiv \theta_{3dB}$!
-        gane_width = np.deg2rad(const["antenna"]["gainWidth"][0]) # Ширина диаграммы направленности в радианах
-        self.gamma = 2*np.sin(gane_width/2)**2/np.log(2)
+        # #!$gane\_width \equiv \theta_{3dB}$!
+        # gane_width = np.deg2rad(const["antenna"]["gainWidth"][0]) # Ширина диаграммы направленности в радианах
+        # self.gamma = 2*np.sin(gane_width/2)**2/np.log(2)
 
-        sigmaxx = const["surface"]["sigmaxx"][0]
-        sigmayy = const["surface"]["sigmayy"][0]
-        print(sigmaxx)
+        self.sigmaxx = const["surface"]["sigmaxx"][0]
+        self.sigmayy = const["surface"]["sigmayy"][0]
 
         # print(np.sum(self.sigma))
 
-        gridsize = const["surface"]["gridSize"][0]
+        # gridsize = const["surface"]["gridSize"][0]
         # self.sigma = self.sigma.reshape((gridsize, gridsize))
 
     def main(self):
@@ -84,10 +83,10 @@ class Pulse():
 
             return G0*np.exp(-2/self.gamma * np.sin(theta)**2)
 
-    def cross_section(theta, sigmaxx, sigmayy):
+    def cross_section(self, theta) :
         F = 0.5
-        sigma =  F**2/( 2*np.cos(theta)**4 * np.sqrt(sigmaxx * sigmayy) )
-        sigma *= np.exp( np.tan(theta)/(2*sigmaxx) )
+        sigma =  F**2/( 2*np.cos(theta)**4 * np.sqrt(self.sigmaxx * self.sigmayy) )
+        sigma *= np.exp( - np.tan(theta)**2/(2*self.sigmaxx) )
         return sigma
 
     def G(self, theta, G0=1):
