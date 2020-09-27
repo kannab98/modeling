@@ -7,16 +7,16 @@ from pandas import read_csv
 
 class Brown():
     def __init__(self, sigma_s, const):
-        self.R = const["earth.radius"][0]
-        self.c = const["light.speed"][0]
+        self.R = const["constants"]["earthRadius"][0]
+        self.c = const["constants"]["lightSpeed"][0]
 
-        self.xi = np.deg2rad(const["antenna.deviation"][0]) 
-        self.theta = np.deg2rad(const["antenna.gainWidth"][0]) 
+        self.xi = np.deg2rad(const["antenna"]["deviation"][0]) 
+        self.theta = np.deg2rad(const["antenna"]["gainWidth"][0]) 
         self.Gamma = self.gamma(self.theta)
 
-        self.h = const["antenna.z"][0]
+        self.h = const["antenna"]["z"][0]
         self.sigma_s = sigma_s 
-        self.T = const["antenna.impulseDuration"][0]
+        self.T = const["antenna"]["impulseDuration"][0]
 
 
     def H(self,h):
@@ -78,8 +78,8 @@ class Brown():
 
 class Retracking():
     def __init__(self, const):
-        self.c = const["light.speed"][0]
-        self.T = const["antenna.impulseDuration"][0]
+        self.c = const["constants"]["lightSpeed"][0]
+        self.T = const["antenna"]["impulseDuration"][0]
 
     def leading_edge(self,t,pulse):
         n = np.argmax(pulse)
@@ -131,12 +131,40 @@ class Retracking():
         return popt, ice 
 
 
-    def height(self, sigma_l):
+    def swh(self, sigma_l):
         sigma_p = 0.425 * self.T
-        sigma_c = sigma_l/np.sqrt(2)
-        print(sigma_c*1e+9)
+        sigma_c = sigma_l
+        sigma_c = sigma_l*np.sqrt(2)
+
         sigma_s = np.sqrt((sigma_c**2 - sigma_p**2))*self.c/2
         return 4*sigma_s
+
+    def height(self, tau):
+        return tau*self.c
+
+    def emb(self, swh, U10, dtype = "Rostov"):
+        if dtype ==  "Rostov":
+            emb = swh * (- 0.019 + 0.0027 * swh - 0.0037 * U10 + 0.00014 * U10**2)
+            return emb
+
+        elif dtype == "Chelton":
+            coeff = np.array([0.0029, -0.0038, 0.000155 ])
+            emb = [coeff[i]*U10**i for i in range(coeff.size)]
+            EMB = 0
+            for i in range(coeff.size):
+                EMB += emb[i]
+            return  -abs(EMB)
+
+
+        elif dtype == "Ray":
+            coeff = np.array([0.00666,  0.0015])
+            emb = [coeff[i]*U10**i for i in range(coeff.size)]
+            EMB = 0
+            for i in range(coeff.size):
+                EMB += emb[i]
+            return  -abs(EMB)
+        
+        return None
     
 if __name__ == "__main__":
     from surface import Surface

@@ -26,7 +26,7 @@ if GPU:
 
         for n in range(k.size): 
             for m in range(phi.size):
-                    kr = k[n]*(x*math.cos(phi[m]) + y*math.sin(phi[m]))      
+                    kr = k[n]*(x[i]*math.cos(phi[m]) + y[i]*math.sin(phi[m]))      
                     Af = A[n] * F[n][m]
                     Cos =  math.cos(kr + psi[n][m]) * Af
                     Sin =  math.sin(kr + psi[n][m]) * Af
@@ -43,8 +43,8 @@ if GPU:
                     ans[2,i] +=  -Sin * ky
 
                     # CWM
-                    x += -Sin * math.cos(phi[m])
-                    y += -Sin * math.sin(phi[m])
+                    x[i] += -Sin * math.cos(phi[m])
+                    y[i] += -Sin * math.sin(phi[m])
                     ans[1,i] *= 1 - Cos * math.cos(phi[m]) * kx
                     ans[2,i] *= 1 - Cos * math.sin(phi[m]) * ky
 
@@ -222,10 +222,7 @@ class Surface(Spectrum):
                 )
 
         self.phi = np.linspace(-np.pi, np.pi,self.M + 1)
-        # self.A = np.empty(shape=(self.N, self.M))
-        # self.F = np.copy(self.A)
 
-        # for i, spectrum in enumerate(self.spectrum):
         spectrum = self.spectrum
 
         self.A = self.amplitude(self.k, spectrum)
@@ -328,21 +325,13 @@ class Surface(Spectrum):
         params = ["mean", "sigmaxx", "sigmayy", ]
         for i, param in enumerate(params):
             if param == "mean":
-                # moments[i] = self.moment(x0, y0, surface[i], p=1)
-                # print(moments[i], "1")
-                moments[i] = np.mean(surface[i])
-                # print(moments[i], "2")
+                moments[i] = self.moment(x0, y0, surface[i], p=1)
+                # moments[i] = np.mean(surface[i])
             else:
-                # moments[i] = np.abs(self.moment(x0, y0, surface[i], p=2) -  moments[0]**2 )
-                # print(moments[i], "3")
-                moments[i] = np.std(surface[i])**2 
-                # print(moments[i], "4")
+                moments[i] = np.abs(self.moment(x0, y0, surface[i], p=2) -  moments[0]**2 )
+                # moments[i] = np.std(surface[i])**2 
 
         return moments
-            
-
-
-
 
 
 if __name__ == "__main__":
@@ -351,23 +340,16 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
 
-    ap = argparse.ArgumentParser(description="This script may plot 1D or/and 2D realizations of rough water surface.")
+    ap = argparse.ArgumentParser(description="This script may plot  2D realizations of rough water surface.")
 
 
     ap.add_argument("-c", "--config", required=False, default="rc.json", help = "path to custom configuration file (default: ./rc.json)")
-    ap.add_argument("-s", "--save", required=False, action='store_true', help = "save all plots in script in pdf file and import data in csv file")
-    ap.add_argument("-t", "--timeplot", required=False, action='store_true', help = "plot evolution of surface at a point (0, 0) in 15 min")
-    ap.add_argument("-x", "--spaceplot", required=False, action='store_true', help = "plot snapshot of surface")
     args = vars(ap.parse_args())
 
     from json import load
     with open(args["config"], "r") as f:
         const = load(f)
 
-    if not args["spaceplot"] and not args["timeplot"]:
-            # ap.print_help()
-            # sys.exit(1)
-            pass
 
     x_size = const["surface"]["x"][0]
     y_size = const["surface"]["y"][0]
@@ -390,7 +372,6 @@ if __name__ == "__main__":
 
 
 
-    # if args["spaceplot"]:
     if True:
         kernels = [kernel_default]
         labels = ["default", "cwm"] 
@@ -441,8 +422,8 @@ if __name__ == "__main__":
             ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
             ax.text(0.05,0.95,
                 '\n'.join((
-                        '$\\sigma^2_s=%.2f$' % (np.std(surf)**2),
-                        '$\\langle z \\rangle = %.2f$' % (np.mean(surf)),
+                        '$\\sigma^2_s=%.5f$' % (np.std(surf)**2),
+                        '$\\langle z \\rangle = %.5f$' % (np.mean(surf)),
                 )),
                 verticalalignment='top',transform=ax.transAxes,)
 

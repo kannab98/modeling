@@ -1,6 +1,10 @@
 import numpy as np
 from scipy import interpolate, integrate
 
+"""
+Спектр ветрового волнения и зыби. Используется при построении морской поверхности. 
+"""
+
 class Spectrum:
     def __init__(self, const):
 
@@ -67,6 +71,7 @@ class Spectrum:
 
         if self.swell:
             self.spectrum = self.interpolate(self.swell_spectrum)
+            self.sigma_sqr = np.trapz(self.spectrum(self.k0), self.k0)
             print("plot swell surface")
 
         return self.spectrum
@@ -207,7 +212,7 @@ class Spectrum:
     
     def swell_spectrum(self, k):
         
-        omega_m = self.Omega(20170) * self.g/self.U10_swell
+        omega_m = self.Omega(20170) * self.g/self.U10
         W = np.power(omega_m/self.omega_k(k), 5)
 
         sigma_sqr = 0.0081 * self.g**2 * np.exp(-0.05) / (6 * omega_m**4)
@@ -241,8 +246,10 @@ if  __name__ == "__main__":
         const = load(f)
         
 
-    U  = args["windspeed"]
-    band = args["band"]
+    # U  = args["windspeed"]
+    U  = [15]
+    # band = args["band"]
+    band = ["Ku"]
     for i in range(len(band)):
         if args["save"]:
             data = {}
@@ -250,29 +257,48 @@ if  __name__ == "__main__":
         const["band"][0] = band[i]
         fig, ax = plt.subplots()
 
-        for j in range(len(U)):
-            const["wind"]["speed"][0] = U[j]
-            spectrum = Spectrum(const)
-            S = spectrum.get_spectrum()[0]
-            k = spectrum.k0[0:-1:100]
-            ax.loglog(k, k**0*S(k),label="$U=%.1f$" % (U[j]) )
+        const_wind = const
+        const_swell = const
 
-            ax.set_title("%s-диапазон" % band[i])
+        const_wind["wind"]["speed"][0] = 15
+        const_wind["wind"]["enable"][0] = True
+        const_wind["swell"]["enable"][0] = False
+
+        const_swell["swell"]["speed"][0] = 15
+        const_swell["swell"]["enable"][0] = True
+        const_swell["wind"]["enable"][0] = False
+
+        for j in range(len(U)):
+
+            spectrum1 = Spectrum(const_wind)
+            S1 = spectrum1.get_spectrum()
+            k1 = spectrum1.k0[0:-1:100]
+
+            spectrum2 = Spectrum(const_swell)
+            S2 = spectrum2.get_spectrum()
+            k2 = spectrum2.k0[0:-1:100]
+
+            ax.loglog(k1, k1**0*S1(k1), label="wind waves")
+            ax.loglog(k2, k2**0*S2(k2), label="swell")
+
+            # ax.set_title("%s-диапазон" % band[i])
             ax.set_ylabel("$S(\\kappa),   м^3 \\cdot рад^{-1}$")
             ax.set_xlabel("$\\kappa, рад \\cdot м^{-1}$")
 
             ax.set_xlim((5e-3,100))
             ax.legend()
 
+
+            plt.savefig("spectrum_" + band[i])
             
 
             if args["save"]:
                 import pandas as pd
-                data.update({'k'+str(U[j]): k })
-                data.update({'S'+str(U[j]): S(k) })
+                # data.update({'k'+str(U[j]): k })
+                # data.update({'S'+str(U[j]): S(k) })
                 plt.savefig("spectrum_" + band[i])
-                data = pd.DataFrame(data)
-                data.to_csv('spectrum_'+band[i]+'.csv', index = False, sep=';')
+                # data = pd.DataFrame(data)
+                # data.to_csv('spectrum_'+band[i]+'.csv', index = False, sep=';')
 
 
 

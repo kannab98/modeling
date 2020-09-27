@@ -5,49 +5,48 @@ class Pulse():
         # if len(x.shape) < 2:
         #     self.x, self.y = np.meshgrid(x,y)
         # else:
-        # self.x, self.y = x, y
+        self.x, self.y = x, y
 
-        # self.r = np.vstack((
-        #                     self.x.flatten(),
-        #                     self.y.flatten(),
-        #                     surface[0].flatten()
-        #                 ))
+        self.r = np.vstack((
+                            self.x.flatten(),
+                            self.y.flatten(),
+                            surface[0].flatten()
+                        ))
 
-        # self.z0 = const["antenna"]["z"][0] + surface[0].max()
-        # r0 = [ const["antenna"]["x"][0], const["antenna"]["y"][0], const["antenna"]["z"][0]]
+        self.z0 = const["antenna"]["z"][0] + surface[0].max()
+        r0 = [ const["antenna"]["x"][0], const["antenna"]["y"][0], const["antenna"]["z"][0]]
 
-        # self.r0 = np.vstack((
-        #               +r0[0]*np.zeros(self.x.size),
-        #               +r0[1]*np.zeros(self.y.size),
-        #               -r0[2]*np.ones(surface[0].size)
-        #             ))
+        self.r0 = np.vstack((
+                      +r0[0]*np.zeros(self.x.size),
+                      +r0[1]*np.zeros(self.y.size),
+                      -r0[2]*np.ones(surface[0].size)
+                    ))
 
-        # self.n = np.vstack((
-        #                 surface[1].flatten(),
-        #                 surface[2].flatten(),
-        #                 np.ones(surface[0].size)
-        #             ))
+        self.n = np.vstack((
+                        surface[1].flatten(),
+                        surface[2].flatten(),
+                        np.ones(surface[0].size)
+                    ))
 
 
-        # self.timp = const["antenna"]["impulseDuration"][0]
-        # self.c =  const["constants"]["lightSpeed"][0]
-        # self.R = self.r - self.r0
+        self.timp = const["antenna"]["impulseDuration"][0]
+        self.c =  const["constants"]["lightSpeed"][0]
+        self.R = self.r - self.r0
 
-        # self.Rabs = self.Rabs_calc(self.R)
-        # self.Nabs = self.Nabs_calc(self.n)
-        # self.theta = self.theta_calc(self.R, self.Rabs)
-        # self.theta0 = self.theta0_calc(self.R, self.n, self.Rabs, self.Nabs)
+        self.Rabs = self.Rabs_calc(self.R)
+        self.Nabs = self.Nabs_calc(self.n)
+        self.theta = self.theta_calc(self.R, self.Rabs)
+        self.theta0 = self.theta0_calc(self.R, self.n, self.Rabs, self.Nabs)
 
-        # #!$gane\_width \equiv \theta_{3dB}$!
-        # gane_width = np.deg2rad(const["antenna"]["gainWidth"][0]) # Ширина диаграммы направленности в радианах
-        # self.gamma = 2*np.sin(gane_width/2)**2/np.log(2)
+        #!$gane\_width \equiv \theta_{3dB}$!
+        gane_width = np.deg2rad(const["antenna"]["gainWidth"][0]) # Ширина диаграммы направленности в радианах
+        self.gamma = 2*np.sin(gane_width/2)**2/np.log(2)
 
         self.sigmaxx = const["surface"]["sigmaxx"][0]
         self.sigmayy = const["surface"]["sigmayy"][0]
 
         # print(np.sum(self.sigma))
 
-        # gridsize = const["surface"]["gridSize"][0]
         # self.sigma = self.sigma.reshape((gridsize, gridsize))
 
     def main(self):
@@ -202,6 +201,36 @@ class Pulse():
         # for i in range()
         # index2 = [ i for i in range(tau.size) if 0 <= t - tau[i] <= timp ]
 
+    def pdf(self, surf):
+        index = self.mirror_sort()
+        z = surf[0][index].flatten()
+        N = []
+        Z = []
+
+        while z.size > 0:
+            index = np.where( np.abs(z - z[0])  <= 0.01 )[0]
+            Z.append(z[0])
+            z = np.delete(z, index)
+            N.append(index.size)
+
+        Z = np.array(Z)
+        N = np.array(N)
+        N = N[Z.argsort()]
+        Z = np.sort(Z)
+
+        Nint = np.zeros(Z.size)
+        for i in range(Z.size):
+            Nint[i] = np.trapz(N[0:i], Z[0:i])
+        
+        norm = np.trapz(N, Z)
+        return Z, N/norm, Nint/norm
+            
+
+
+
+
+
+
 
 if __name__ == "__main__":
 
@@ -220,8 +249,6 @@ if __name__ == "__main__":
     x,y = np.meshgrid(x0,y0)
 
     surface = [np.zeros(x.size), np.zeros(x.size), np.zeros(x.size)]
-
-
 
     fig, ax = plt.subplots()
     pulse = Pulse(surface, x, y, const, )
