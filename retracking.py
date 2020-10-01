@@ -133,7 +133,6 @@ class Retracking():
 
     def swh(self, sigma_l):
         sigma_p = 0.425 * self.T
-<<<<<<< HEAD
         sigma_c = sigma_l
         sigma_c = sigma_l*np.sqrt(2)
 
@@ -166,19 +165,6 @@ class Retracking():
             return  -abs(EMB)
         
         return None
-=======
-        sigma_c = sigma_l/np.sqrt(2)
-        # print(sigma_c*1e+9)
-        sigma_s = np.sqrt((sigma_c**2 - sigma_p**2))*self.c/2
-        return 4*sigma_s
-
-    def emb(self, U10):
-        a = np.array([0.0029, -0.0038, 0.000155 ])
-        emb = np.sum([a[i]*U10**i for i in range(a.size)])
-        b = np.array([0.00666,  0.0015])
-        emb1 = np.sum([b[i]*U10**i for i in range(b.size)])
-        return emb, emb1
->>>>>>> origin/develop
     
 if __name__ == "__main__":
     from surface import Surface

@@ -7,13 +7,8 @@ from scipy import interpolate, integrate
 
 class Spectrum:
     def __init__(self, const):
-<<<<<<< HEAD
 
         x = const["surface"]["nonDimWindFetch"][0]
-=======
-        self.U10 = const["wind.speed"][0]
-        x = const["spectrum.nonDimWindFetch"][0]
->>>>>>> origin/develop
         self.band = const["band"][0]
         KT = const["spectrum.edge"][0]
         self.g = const["gravityAcceleration"][0]
@@ -68,7 +63,6 @@ class Spectrum:
 
     def get_spectrum(self):
         # интерполируем смоделированный спектр
-<<<<<<< HEAD
         if self.wind_waves:
             self.spectrum = self.interpolate(self.full_spectrum)
             self.sigma_sqr = np.trapz(self.spectrum(self.k0), self.k0)
@@ -79,9 +73,6 @@ class Spectrum:
             self.sigma_sqr = np.trapz(self.spectrum(self.k0), self.k0)
             print("plot swell surface")
 
-=======
-        self.spectrum = self.interpolate(self.full_spectrum)
->>>>>>> origin/develop
         return self.spectrum
 
     def find_decision(self,omega):
@@ -221,16 +212,11 @@ class Spectrum:
         return spectrum
     
     def swell_spectrum(self, k):
-<<<<<<< HEAD
         
         omega_m = self.Omega(20170) * self.g/self.U10
         W = np.power(omega_m/self.omega_k(k), 5)
 
         sigma_sqr = 0.0081 * self.g**2 * np.exp(-0.05) / (6 * omega_m**4)
-=======
-        W = np.power(self.omega_m/self.omega_k(k), 5)
-        sigma_sqr = 0.0081 * self.g**2 * np.exp(-0.05) / (6 * self.omega_m**4)
->>>>>>> origin/develop
         spectrum = 6 * sigma_sqr * W / self.omega_k(k) * np.exp(-1.2 * W)   * self.det(k)
         return spectrum
 
@@ -285,25 +271,6 @@ if  __name__ == "__main__":
         const_swell["wind"]["enable"][0] = False
 
         for j in range(len(U)):
-<<<<<<< HEAD
-=======
-            const["wind.speed"][0] = U[j]
-            if args["difference"]:
-                bool1 = [False, True, True]
-                bool2 = [True, False, True]
-                for n in range(len(bool1)):
-                    const["spectrum.swell"][0] = bool1[n]
-                    const["spectrum.windWaves"][0] = bool2[n]
-                    spectrum = Spectrum(const)
-                    S = spectrum.get_spectrum()
-                    k = spectrum.k0[0:-1:100]
-                    ax.loglog(k, k**0*S(k),label="s=%s, w=%s" % (const["spectrum.swell"][0], const["spectrum.windWaves"][0]) )
-            else:
-                spectrum = Spectrum(const)
-                S = spectrum.get_spectrum()
-                k = spectrum.k0[0:-1:100]
-                ax.loglog(k, k**0*S(k),label="$U=%.1f$" % (U[j]) )
->>>>>>> origin/develop
 
             spectrum1 = Spectrum(const_wind)
             S1 = spectrum1.get_spectrum()
