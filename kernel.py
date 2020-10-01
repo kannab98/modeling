@@ -89,19 +89,3 @@ def kernel_polar(ans, x, y, k, phi, A, F, psi):
 
                 x[i] += Sin * math.cos(phi[m])
                 y[i] += Sin * math.sin(phi[m])
-
-
-@cuda.jit
-def kernel_test(ans, x, y, k, phi, A, F, psi):
-    i = cuda.grid(1)
-
-    if i >= x.shape[0]:
-        return
-
-    for n in range(k.size): 
-        for m in range(phi.size):
-            kr = k[n]*(x[i]*math.cos(phi[m]) + y[i]*math.sin(phi[m]))      
-            Af = A[n] * F[n][m]
-            Cos =  math.cos(kr + psi[n][m]) * Af
-            # Высоты (z)
-            ans[0,i] +=  Cos 

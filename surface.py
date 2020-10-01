@@ -134,6 +134,7 @@ def init_kernel(kernel, arr, X, Y, host_constants):
     else:
         kernel(arr, X, Y, host_constants)
 
+<<<<<<< HEAD
 
 
 def run_kernels(kernels,  X, Y, host_constants):
@@ -173,9 +174,21 @@ class Surface(Spectrum):
         random_phases = const["surface"]["randomPhases"][0]
         kfrag = "log"
         self.grid_size = const["surface"]["gridSize"][0]
+=======
+        self.N = const["spectrum.kSize"][0]
+        self.M = const["spectrum.phiSize"][0]
+        random_phases = const["surface.enableRandomPhases"][0]
+        kfrag = "log"
+        self.wind = np.deg2rad(const["wind.direction"][0])
+>>>>>>> origin/develop
 
+        Spectrum.__init__(self, const)
+        self.spectrum = self.get_spectrum()
+        k_edge = const["spectrum.edge"][0]
 
+        progress_bar = tqdm( total = 2,  leave = False , desc="Init")
 
+<<<<<<< HEAD
         self.direction = []
 
         if const["wind"]["enable"][0]:
@@ -187,9 +200,9 @@ class Surface(Spectrum):
         self.direction = np.array(self.direction)
 
         # print(self.direction)
+=======
+>>>>>>> origin/develop
 
-        Spectrum.__init__(self, const)
-        self.spectrum = self.get_spectrum()
 
 
 
@@ -198,7 +211,6 @@ class Surface(Spectrum):
                 self.k = np.logspace(np.log10(self.k_m/4), np.log10(self.k_edge['Ku']), self.N + 1)
             else:
                 self.k = np.logspace(np.log10(self.KT[0]), np.log10(self.KT[1]), self.N + 1)
-
         elif kfrag == 'quad':
             self.k = np.zeros(self.N+1)
             for i in range(self.N+1):
@@ -222,6 +234,7 @@ class Surface(Spectrum):
                 )
 
         self.phi = np.linspace(-np.pi, np.pi,self.M + 1)
+<<<<<<< HEAD
 
         spectrum = self.spectrum
 
@@ -233,8 +246,30 @@ class Surface(Spectrum):
             self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
         else:
             self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
+=======
+        self.phi_c = self.phi + self.wind
 
 
+
+>>>>>>> origin/develop
+
+        if random_phases == 0:
+            self.psi = np.array([
+                    [0 for m in range(self.M) ] for n in range(self.N) ])
+        elif random_phases == 1:
+            self.psi = np.array([
+                [ np.random.uniform(0,2*pi) for m in range(self.M)]
+                            for n in range(self.N) ])
+
+
+
+        self.A = self.amplitude(self.k)
+        progress_bar.update(1)
+        self.F = self.angle(self.k,self.phi)
+        progress_bar.update(1)
+
+        progress_bar.close()
+        progress_bar.clear()
 
     def B(self,k):
           def b(k):
@@ -246,9 +281,9 @@ class Surface(Spectrum):
           B=10**b(k)
           return B
 
-    def Phi(self,k,phi, direction = 0):
+    def Phi(self,k,phi):
         # Функция углового распределения
-        phi = phi - direction
+        phi = phi - self.wind
         normalization = lambda B: B/np.arctan(np.sinh(2* (pi)*B))
         B0 = self.B(k)
         A0 = normalization(B0)
@@ -256,33 +291,174 @@ class Surface(Spectrum):
         return Phi
 
 
-    def angle(self,k, phi, direction):
+    def angle(self,k, phi):
         M = self.M
         N = self.N
-
-
-        Phi = lambda phi,k, direction: self.Phi(k, phi, direction)
+        Phi = lambda phi,k: self.Phi(k,phi)
         integral = np.zeros((N,M))
         for i in range(N):
             for j in range(M):
                 # integral[i][j] = integrate.quad( Phi, phi[j], phi[j+1], args=(k[i],) )[0]
-                integral[i][j] += np.trapz( Phi( phi[j:j+2],k[i], direction=direction), phi[j:j+2], )
+                integral[i][j] = np.trapz( Phi( phi[j:j+2],k[i] ), phi[j:j+2])
         amplitude = np.sqrt(2 *integral )
         return amplitude
 
-    def amplitude(self, k, spectrum):
+    def amplitude(self, k):
         N = k.size
-
+        S = self.spectrum
         integral = np.zeros(k.size-1)
-        # for S in self.spectrum:
         for i in range(1,N):
+<<<<<<< HEAD
             integral[i-1] += integrate.quad(spectrum,k[i-1],k[i])[0]
 
+=======
+            integral[i-1] = integrate.quad(S,k[i-1],k[i])[0] 
+>>>>>>> origin/develop
         amplitude = np.sqrt(2 *integral )
         return np.array(amplitude)
 
     def export(self):
         return self.k, self.phi, self.A, self.F, self.psi
+<<<<<<< HEAD
+=======
+    
+    def Surface_space(self,r):
+        N = self.N
+        M= self.M
+        k = self.k
+        phi = self.phi
+        A = self.A
+        F = self.F
+        psi = self.psi
+        self.surface = 0
+        progress_bar = tqdm( total = N*M,  leave = False , desc="Surface calc")
+        for n in range(N):
+            for m in range(M):
+                kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
+                tmp = A[n] * \
+                    np.cos( kr + psi[n][m]) * F[n][m]
+
+
+                self.surface += tmp
+
+                progress_bar.update(1)
+        progress_bar.close()
+        progress_bar.clear()
+        heights = self.surface
+        return heights
+
+    def Surface_time(self,t):
+        N = self.N
+        M= self.M
+        k = self.k
+        A = self.A
+        F = self.F
+        psi = self.psi
+        self.surface = 0
+        progress_bar = tqdm( total = N*M,  leave = False , desc="Surface calc")
+        for n in range(N):
+            for m in range(M):
+                tmp = A[n] * \
+                    np.cos( 
+                        +psi[n][m]
+                        +self.omega_k(k[n])*t) \
+                        * F[n][m]
+
+
+                self.surface += tmp
+
+                progress_bar.update(1)
+        progress_bar.close()
+        progress_bar.clear()
+        heights = self.surface
+        return heights
+
+    def surfaces_band(self,r,t):
+        N = self.N
+        M= self.M
+        k = self.k
+        phi = self.phi
+        A = self.A
+        F = self.F
+        psi = self.psi
+
+        s = 0
+        s_xx = 0
+        s_yy = 0
+
+        s1 = 0
+        s_xx1 = 0
+        s_yy1 = 0
+
+        progress_bar = tqdm( total = N*M,  leave = False )
+
+        for n in range(N):
+            for m in range(M):
+                kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
+                tmp = A[n] * \
+                    np.cos( 
+                        +kr
+                        +psi[n][m]
+                        +self.omega_k(k[n])*t) \
+                        * F[n][m]
+
+                tmp1 = -A[n] * \
+                    np.sin( 
+                        +kr
+                        +psi[n][m]
+                        +self.omega_k(k[n])*t) \
+                        * F[n][m]
+
+                if k[n] <= self.k_c.max():
+                    s += tmp
+                    s_xx += k[n]*np.cos(phi[m])*tmp1
+                    s_yy += k[n]*np.sin(phi[m])*tmp1 
+
+                else :
+                    s1 += tmp
+                    s_xx1 += k[n]*np.cos(phi[m])*tmp1
+                    s_yy1 += k[n]*np.sin(phi[m])*tmp1
+
+                progress_bar.update(1)
+        progress_bar.close()
+        progress_bar.clear()
+        band_c = [s, s_xx, s_yy]
+        band_ku = [s+s1, s_xx + s_xx1, s_yy + s_yy1]
+        return band_c, band_ku
+
+    def choppy_wave_space(self, r):
+        N = self.N
+        M= self.M
+        k = self.k
+        phi = self.phi
+        A = self.A
+        F = self.F
+        psi = self.psi
+
+        self.cwm_x = 0
+        self.cwm_y = 0
+        for n in range(N):
+            for m in range(M):
+                kr = k[n]*(r[0]*np.cos(phi[m])+r[1]*np.sin(phi[m]))
+                tmp = -A[n] * \
+                    np.sin( 
+                        +kr
+                        +psi[n][m]) \
+                        * F[n][m]
+
+                self.cwm_x += tmp * np.cos(phi[m])
+                self.cwm_y += tmp * np.sin(phi[m])
+        return [self.cwm_x, self.cwm_y]
+
+
+    def choppy_wave_time(self, t):
+        N = self.N
+        M= self.M
+        k = self.k
+        A = self.A
+        F = self.F
+        psi = self.psi
+>>>>>>> origin/develop
 
     def integrate(self, x, y, i, j):
         dx = x[j] - x[i]
@@ -351,9 +527,9 @@ if __name__ == "__main__":
         const = load(f)
 
 
-    x_size = const["surface"]["x"][0]
-    y_size = const["surface"]["y"][0]
-    grid_size = const["surface"]["gridSize"][0]
+    x_size = const["surface.x"][0]
+    y_size = const["surface.y"][0]
+    grid_size = const["surface.gridSize"][0]
 
 
     args = vars(ap.parse_args())
@@ -393,6 +569,7 @@ if __name__ == "__main__":
             np.copyto(X0[j], X.flatten())
             np.copyto(Y0[j], Y.flatten())
 
+<<<<<<< HEAD
 
             process[j] = Process(target = init_kernel, args = (kernel, arr[j], X0[j], Y0[j], host_constants))
             process[j].start()
@@ -426,6 +603,25 @@ if __name__ == "__main__":
                         '$\\langle z \\rangle = %.5f$' % (np.mean(surf)),
                 )),
                 verticalalignment='top',transform=ax.transAxes,)
+=======
+    if args["spaceplot"]:
+        heights = surface.Surface_space([X,Y]) 
+        fig,ax = plt.subplots()
+        mappable = ax.contourf(X,Y,heights, levels=100)
+        ax.set_xlabel("$x,$ м")
+        ax.set_ylabel("$y,$ м")
+        bar = fig.colorbar(mappable=mappable,ax=ax)
+        bar.set_label("высота, м")
+
+
+        ax.set_title("$U_{10} = %.0f $ м/с" % (surface.U10) )
+        ax.text(0.05,0.95,
+            '\n'.join((
+                    '$\\sigma^2_s=%.2f$' % (np.std(heights)**2), 
+                    '$\\langle z \\rangle = %.2f$' % (np.mean(heights)),
+            )),
+            verticalalignment='top',transform=ax.transAxes,)
+>>>>>>> origin/develop
 
             fig.savefig("%s" % (labels[i]))
 

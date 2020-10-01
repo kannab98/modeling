@@ -39,12 +39,17 @@ class Pulse():
                     ))
 
 
+<<<<<<< HEAD
         self.timp = const["antenna"]["impulseDuration"][0]
 
         self.phi = np.deg2rad(const["antenna"]["polarAngle"][0])
         self.xi = np.deg2rad(const["antenna"]["deviation"][0])
 
         self.c =  const["constants"]["lightSpeed"][0]
+=======
+        self.timp = const["antenna.impulseDuration"][0]
+        self.c =  const["light.speed"][0]
+>>>>>>> origin/develop
         self.R = self.r - self.r0
 
         self.Rabs = self.Rabs_calc(self.R)
@@ -55,6 +60,7 @@ class Pulse():
         #!$gane\_width \equiv \theta_{3dB}$!
         gane_width = np.deg2rad(const["antenna"]["gainWidth"][0]) # Ширина диаграммы направленности в радианах
         self.gamma = 2*np.sin(gane_width/2)**2/np.log(2)
+<<<<<<< HEAD
 
         self.sigmaxx = const["surface"]["sigmaxx"][0]
         self.sigmayy = const["surface"]["sigmayy"][0]
@@ -77,6 +83,8 @@ class Pulse():
     @property
     def position(self):
         return self._r - self.r0
+=======
+>>>>>>> origin/develop
     
     @property
     def water_position(self):
@@ -310,6 +318,10 @@ if __name__ == "__main__":
     # im = ax.contourf(phi, r, theta0.reshape(x.shape))
 
 
+<<<<<<< HEAD
     plt.savefig("G0")
 
     # plt.show()
+=======
+    plt.show()
+>>>>>>> origin/develop
