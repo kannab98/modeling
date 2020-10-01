@@ -325,11 +325,11 @@ class Surface(Spectrum):
         params = ["mean", "sigmaxx", "sigmayy", ]
         for i, param in enumerate(params):
             if param == "mean":
-                moments[i] = self.moment(x0, y0, surface[i], p=1)
-                # moments[i] = np.mean(surface[i])
+                # moments[i] = self.moment(x0, y0, surface[i], p=1)
+                moments[i] = np.mean(surface[i])
             else:
-                moments[i] = np.abs(self.moment(x0, y0, surface[i], p=2) -  moments[0]**2 )
-                # moments[i] = np.std(surface[i])**2 
+                # moments[i] = np.abs(self.moment(x0, y0, surface[i], p=2) -  moments[0]**2 )
+                moments[i] = np.std(surface[i])**2 
 
         return moments
 

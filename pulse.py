@@ -5,6 +5,8 @@ class Pulse():
         # if len(x.shape) < 2:
         #     self.x, self.y = np.meshgrid(x,y)
         # else:
+
+
         self.x, self.y = x, y
 
         self.r = np.vstack((
@@ -13,12 +15,20 @@ class Pulse():
                             surface[0].flatten()
                         ))
 
+
+
+        self._r0 = [ const["antenna"]["x"][0], const["antenna"]["y"][0], const["antenna"]["z"][0]]
+        self._r = [0, 0, 0]
+        self._R = self._r - self._r0
+
+        r0 = self._r0
         self.z0 = const["antenna"]["z"][0] + surface[0].max()
-        r0 = [ const["antenna"]["x"][0], const["antenna"]["y"][0], const["antenna"]["z"][0]]
+
+        print(r0)
 
         self.r0 = np.vstack((
-                      +r0[0]*np.zeros(self.x.size),
-                      +r0[1]*np.zeros(self.y.size),
+                      -r0[0]*np.ones(self.x.size),
+                      -r0[1]*np.ones(self.y.size),
                       -r0[2]*np.ones(surface[0].size)
                     ))
 
@@ -30,6 +40,10 @@ class Pulse():
 
 
         self.timp = const["antenna"]["impulseDuration"][0]
+
+        self.phi = np.deg2rad(const["antenna"]["polarAngle"][0])
+        self.xi = np.deg2rad(const["antenna"]["deviation"][0])
+
         self.c =  const["constants"]["lightSpeed"][0]
         self.R = self.r - self.r0
 
@@ -45,9 +59,32 @@ class Pulse():
         self.sigmaxx = const["surface"]["sigmaxx"][0]
         self.sigmayy = const["surface"]["sigmayy"][0]
 
+
+
         # print(np.sum(self.sigma))
 
         # self.sigma = self.sigma.reshape((gridsize, gridsize))
+    @property
+    def sattelite_position(self):
+        return self._r0
+
+    @sattelite_position.setter
+    def sattelite_position(self, r0):
+        r0 = r0.flatten()
+        self._r0 = r0
+        self.R = self.r - self.r0
+
+    @property
+    def position(self):
+        return self._r - self.r0
+    
+    @property
+    def water_position(self):
+        return self._r 
+
+    
+
+    
 
     def main(self):
         # self.theta  = self.theta_calc(self.R, self.Rabs)
@@ -56,14 +93,15 @@ class Pulse():
         return self.theta0
 
 
-    def G0(self, xi=0, phi=0, G0=1,):
+    def G0(self,):
             # G -- диаграмма направленности
             # theta -- угол падения
             # phi = const["antenna"]["polarAngle"]
 
 
-            xi = np.deg2rad(xi)
-            phi = np.deg2rad(phi)
+            # xi = np.deg2rad(xi)
+            phi = self.phi
+            xi = self.xi
 
             X = self.R[0,:] * np.cos(phi) + self.R[1,:] * np.sin(phi)
             Y = self.R[0,:] * np.sin(phi) - self.R[1,:] * np.cos(phi)
@@ -88,10 +126,10 @@ class Pulse():
         sigma *= np.exp( - np.tan(theta)**2/(2*self.sigmaxx) )
         return sigma
 
-    def G(self, theta, G0=1):
-            # G -- диаграмма направленности
-            # theta -- угол падения
-            return G0*np.exp(-2/self.gamma * np.sin(theta)**2)
+    # def G(self, theta, G0=1):
+    #         # G -- диаграмма направленности
+    #         # theta -- угол падения
+    #         return G0*np.exp(-2/self.gamma * np.sin(theta)**2)
 
     def Rabs_calc(self, R):
         R = np.array(R)
