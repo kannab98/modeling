@@ -13,15 +13,21 @@ class Config():
         
         self._surface = Surface(self._rc)
         self._sattelite = Sattelite(self._rc)
+        self._constants = Constants()
         
 
     @property
     def surface(self):
         return self._surface
 
+
     @property
     def sattelite(self):
         return self._sattelite
+
+    @property
+    def constants(self):
+        return self._constants
 
     def export(self):
         with open('rc.obj', 'wb') as f:
@@ -43,8 +49,18 @@ class Config():
 class Surface():
 
 
+    @staticmethod
+    def abs(vec):
+        vec = np.array(vec, dtype=float)
+        return np.diag(vec.T@vec)
 
-    def __init__(self, rc):
+    @staticmethod
+    def position(r, r0):
+        r0 = r0[np.newaxis]
+        return np.array(r + ( np.ones((r.shape[1], 1) ) @ r0 ).T)
+
+
+    def __init__(self, rc, ):
         self._rc = rc["surface"]
         self._x = np.linspace(-self.x, self.x, self.gridSize)
         self._y = np.linspace(-self.y, self.y, self.gridSize)
@@ -73,9 +89,9 @@ class Surface():
                     np.frombuffer(self._zy),
                     np.frombuffer(self._zz),
                   ], dtype="object")
-
-
         
+        self._R = None
+
         self._A = None
         self._F = None
         self._Psi = None
@@ -178,6 +194,17 @@ class Surface():
     def phases(self, Psi):
         self._Psi = Psi
     
+    @property
+    def distance_to(self, ):
+        return self._R
+
+    @distance_to.setter
+    def distance_to(self, obj):
+        self._R = self.position(self.coordinates, obj.coordinates)
+
+
+
+    
 
 
     
@@ -231,4 +258,8 @@ class Sattelite():
         return np.deg2rad(self._rc["gainWidth"])
 
 
-
+class Constants:
+    def __init__(self):
+        self.c = 299792458
+        self.R = 6370e3
+        self.g = 9.81

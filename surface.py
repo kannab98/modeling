@@ -226,10 +226,6 @@ class Surface(Spectrum):
 
         spectrum = self.spectrum
 
-        self.A = self.amplitude(self.k, spectrum)
-        self.F = self.angle(self.k, self.phi, direction=self.direction[0])
-
-
         if random_phases:
             self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
         else:
