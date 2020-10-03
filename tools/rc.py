@@ -10,7 +10,7 @@ class Config():
         for Key, Value in self._rc.items():
             for key, value in Value.items():
                 self._rc[Key][key] = value[0]
-        
+
         self._surface = Surface(self._rc)
         self._sattelite = Sattelite(self._rc)
         self._constants = Constants()
@@ -62,6 +62,9 @@ class Surface():
 
     def __init__(self, rc, ):
         self._rc = rc["surface"]
+
+
+
         self._x = np.linspace(-self.x, self.x, self.gridSize)
         self._y = np.linspace(-self.y, self.y, self.gridSize)
         self._x, self._y = np.meshgrid(self._x, self._y)
@@ -97,6 +100,9 @@ class Surface():
         self._Psi = None
     
         
+
+
+
 
     @property
     def gridSize(self):
@@ -263,3 +269,5 @@ class Constants:
         self.c = 299792458
         self.R = 6370e3
         self.g = 9.81
+
+config = Config()

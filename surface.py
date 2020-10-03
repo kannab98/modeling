@@ -5,6 +5,7 @@ from scipy import interpolate, integrate
 from tqdm import tqdm
 from spectrum import Spectrum
 
+from tools.rc import Config, Surface, Sattelite
 
 try:
     from numba import cuda
@@ -164,12 +165,13 @@ def run_kernels(kernels,  X, Y, host_constants):
     return arr, X0, Y0
 
 
-class Surface(Spectrum):
-    def __init__(self,const):
+class Surface(Spectrum, Config):
+    def __init__(self):
 
-        self.N = const["surface"]["kSize"][0]
+        self.N = self.surface.kSize
+        self.M = self.surface.phiSize
         k_edge = const["surface"]["kEdge"][0]
-        self.M = const["surface"]["phiSize"][0]
+
         random_phases = const["surface"]["randomPhases"][0]
         kfrag = "log"
         self.grid_size = const["surface"]["gridSize"][0]
@@ -356,25 +358,9 @@ if __name__ == "__main__":
     ap.add_argument("-c", "--config", required=False, default="rc.json", help = "path to custom configuration file (default: ./rc.json)")
     args = vars(ap.parse_args())
 
-    from json import load
-    with open(args["config"], "r") as f:
-        const = load(f)
 
 
-    x_size = const["surface.x"][0]
-    y_size = const["surface.y"][0]
-    grid_size = const["surface.gridSize"][0]
-
-
-    args = vars(ap.parse_args())
-
-
-    x = np.linspace(-x_size, x_size, grid_size)
-    y = np.linspace(-x_size, x_size, grid_size)
-    t = np.arange(0, 900, 0.5)
-
-    X, Y = np.meshgrid(x, y)
-    surface = Surface(const)
+    surface = Surface()
 
     host_constants = surface.export()
 
