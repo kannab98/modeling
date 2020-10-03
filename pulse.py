@@ -17,8 +17,12 @@ class Pulse():
 
 
 
-        self._r0 = [ const["antenna"]["x"][0], const["antenna"]["y"][0], const["antenna"]["z"][0]]
-        self._r = [0, 0, 0]
+        self._r0 = np.array([ 
+                     const["antenna"]["x"][0], 
+                     const["antenna"]["y"][0], 
+                     const["antenna"]["z"][0]
+                   ])
+        self._r = np.array([0, 0, 0])
         self._R = self._r - self._r0
 
         r0 = self._r0
@@ -27,10 +31,10 @@ class Pulse():
         print(r0)
 
         self.r0 = np.vstack((
-                      -r0[0]*np.ones(self.x.size),
-                      -r0[1]*np.ones(self.y.size),
-                      -r0[2]*np.ones(surface[0].size)
-                    ))
+                                -r0[0]*np.ones(self.x.size),
+                                -r0[1]*np.ones(self.y.size),
+                                -r0[2]*np.ones(surface[0].size)
+                            ))
 
         self.n = np.vstack((
                         surface[1].flatten(),
@@ -64,23 +68,6 @@ class Pulse():
         # print(np.sum(self.sigma))
 
         # self.sigma = self.sigma.reshape((gridsize, gridsize))
-    @property
-    def sattelite_position(self):
-        return self._r0
-
-    @sattelite_position.setter
-    def sattelite_position(self, r0):
-        r0 = r0.flatten()
-        self._r0 = r0
-        self._R = self.r - self.r0
-
-    @property
-    def position(self):
-        return self.water_position - self.sattelite_position
-    
-    @property
-    def water_position(self):
-        return self._r 
 
     
 
@@ -97,7 +84,6 @@ class Pulse():
             # G -- диаграмма направленности
             # theta -- угол падения
             # phi = const["antenna"]["polarAngle"]
-
 
             # xi = np.deg2rad(xi)
             phi = self.phi
