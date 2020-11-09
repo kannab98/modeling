@@ -154,9 +154,11 @@ class Surface():
         r0 = r0[np.newaxis]
         return np.array(r + (np.ones((r.shape[1], 1)) @ r0).T)
 
-    def __init__(self):
+    def __init__(self, **kwargs):
 
-        with open(os.path.join(os.path.abspath(os.getcwd()), "rc.json"), "r", encoding='utf-8') as f:
+        config  = kwargs["config"] if "config" in kwargs else os.path.join(os.path.abspath(os.getcwd()), "rc.json")
+
+        with open(config) as f:
             self._rc = load(f)
 
         for Key, Value in self._rc.items():
@@ -164,8 +166,7 @@ class Surface():
                 self._rc[Key][key] = value[0]
 
         vars(self).update(self._rc["surface"])
-
-        spectrum = Spectrum()
+        spectrum = Spectrum(**kwargs)
         self.spectrum = spectrum
 
         self._x = np.linspace(-self.x, self.x, self.gridSize)
@@ -215,8 +216,8 @@ class Surface():
 
         self.direction = []
 
-        if spectrum.windWaves.enable:
-            self.direction.append(np.deg2rad(spectrum.windWaves.direction))
+        if spectrum.wind.enable:
+            self.direction.append(np.deg2rad(spectrum.wind.direction))
 
         if spectrum.swell.enable:
             self.direction.append(np.deg2rad(spectrum.swell.direction))
@@ -290,7 +291,7 @@ class Surface():
     def _theoryStaticMoments(self, band):
 
         KT = self.spectrum.kEdges(self.spectrum.k_m, band)
-        S = self.spectrum.full_spectrum
+        S = self.spectrum.get_spectrum
         Fx = lambda phi, k: self.Phi(k, phi) * np.cos(phi)**2
         Fy = lambda phi, k: self.Phi(k, phi) * np.sin(phi)**2
         Fxy = lambda phi, k: self.Phi(k, phi) * np.sin(phi)*np.cos(phi)

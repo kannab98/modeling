@@ -1,8 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import interpolate, integrate
+import os
 
-from .rc import Surface, Constants, Swell, Wind
+
+from scipy import interpolate, integrate, optimize
+from json import load,  dump
 
 
 """
@@ -10,19 +12,57 @@ from .rc import Surface, Constants, Swell, Wind
 """
 
 
-class Spectrum(Surface, Constants, Swell, Wind):
-    def __init__(self):
-        self._surface = Surface()
-        self._constants = Constants()
-        self.swell = Swell()
-        self.windWaves = Wind()
+class Spectrum():
+    @staticmethod
+    def __json2object__(file):
 
-        x = self._surface.nonDimWindFetch
+        """
+        Преобразование полей конфигурационного файла rc.json 
+        в объекты класса и присвоение им соответствующих значений
+
+
+        Файл из json вида:
+
+            >> { ... "swell": { ... "speed": [ 10, ... ] }, ... }
+
+        преобразуется в переменную __rc__ типа dict, поля выделенные под размерности и комментарии отбрасываются):
+
+            >> __rc__["swell"] = { ... , "speed": 10 } 
+
+        после словарь __rc__ становится объектом класса:
+
+            >> rc.swell.speed
+            >> out: 10
+        """
+        with open(file) as f:
+            __rc__ = load(f)
+
+        rc = type('NoneType', (object,), {})()
+
+
+        for Key, Value in __rc__.items():
+            setattr(rc, Key, type('rc', (object,), {}))
+            for key, value in Value.items():
+                __rc__[Key][key] = value[0]
+                attr = getattr(rc, Key)
+                setattr(attr, key, value[0])
+        
+        return rc
+
+    def __init__(self,**kwargs):
+
+
+        config  = kwargs["config"] if "config" in kwargs else os.path.join(os.path.abspath(os.getcwd()), "rc.json")
+        self.rc = self.__json2object__(config)
+
+        x = self.rc.surface.nonDimWindFetch
         self._nonDimWindWetch = x
-        self.band = self._surface.band
-        self.g = self._constants.gravityAcceleration
+        self.band = self.rc.surface.band
+        self.g = self.rc.constants.gravityAcceleration
 
-        self.windSpeed = self.windWaves.speed
+        self.windSpeed = self.rc.wind.speed
+        self.wind= self.rc.wind
+        self.swell= self.rc.swell
         self.peakUpdate()
 
     @staticmethod
@@ -75,7 +115,7 @@ class Spectrum(Surface, Constants, Swell, Wind):
         return edges
 
     def peakUpdate(self):
-        x = self._surface.nonDimWindFetch
+        x = self.rc.surface.nonDimWindFetch
         U = self.windSpeed
         # коэффициент gamma (см. спектр JONSWAP)
         self._gamma = self.Gamma(x)
@@ -113,21 +153,12 @@ class Spectrum(Surface, Constants, Swell, Wind):
         self.limit_k = self.limit_k[np.where(self.limit_k <= self.KT.max())]
 
 
-    def plot(self):
-        fig, ax = plt.subplots(ncols=2)
-        for x in [4000,6000, 11000,16000, 20000]:
-            self.nonDimWindFetch = x
-            S = self.get_spectrum()
-            k = self.k0
-            ax[0].loglog(k, S(k))
+    def plot(self, stype="ryabkova"):
+        S = self.get_spectrum(stype)
+        k = self.k0
+        plt.loglog(k, S(k))
 
-        for U in [5,10,15]:
-            self.windSpeed = U
-            S = self.get_spectrum()
-            k = self.k0
-            ax[1].loglog(k, S(k))
-
-        plt.savefig("spectrum")
+        # plt.savefig("spectrum")
 
     @property
     def nonDimWindFetch(self):
@@ -147,11 +178,14 @@ class Spectrum(Surface, Constants, Swell, Wind):
         self.U10 = U10
         self.peakUpdate()
 
-    def get_spectrum(self):
+    def get_spectrum(self, stype="ryabkova"):
         # self.peakUpdate()
         # интерполируем смоделированный спектр
-        if self.windWaves.enable:
-            spectrum = self.interpolate(self.full_spectrum)
+        if stype == "ryabkova":
+            spectrum = self.interpolate(self.ryabkova)
+        elif stype == 'slick':
+            f = lambda k: self.ryabkova(k)*self.with_slick(k)
+            spectrum = self.interpolate(f)
             # spectrum = self.full_spectrum
             # spec = self.interpolate(self.full_spectrum)
             # spectrum = lambda k: spec(k)*0.0081/2
@@ -167,12 +201,16 @@ class Spectrum(Surface, Constants, Swell, Wind):
         return spectrum
 
     def find_decision(self, omega):
-        P = self.g * 1000.0/0.074
-        Q = -1000.0*omega**2/0.074
-        x1 = -Q/2.0 + np.sqrt((Q/2)**2 + (P/3)**3)
-        x2 = -Q/2.0 - np.sqrt((Q/2)**2 + (P/3)**3)
-        k = x1**(1/3)-(-x2)**(1/3)
-        return k
+        # P = self.g * 1000.0/0.074
+        # Q = -1000.0*omega**2/0.074
+        # x1 = -Q/2.0 + np.sqrt((Q/2)**2 + (P/3)**3)
+        # x2 = -Q/2.0 - np.sqrt((Q/2)**2 + (P/3)**3)
+        # k = x1**(1/3)-(-x2)**(1/3)
+        # print(k)
+
+        p = [74e-6, 0, self.g, omega**2]
+        k = np.roots(p)
+        return 2*np.real(k[0])
 
     def det(self, k):
         #        Функция возвращает Якобиан при переходе от частоты к
@@ -333,7 +371,7 @@ class Spectrum(Surface, Constants, Swell, Wind):
         return var
 
 
-    def full_spectrum(self, k):
+    def ryabkova(self, k):
 
         self.peakUpdate()
         if not isinstance(k, np.ndarray):
@@ -342,16 +380,70 @@ class Spectrum(Surface, Constants, Swell, Wind):
         ind = np.zeros((self.limit_k.size + 1), dtype=int)
         n = self.limit_k.size
 
-        full_spectrum = np.zeros(k.size, dtype=np.float64)
+        ryabkova = np.zeros(k.size, dtype=np.float64)
         for j in range(n):
             tmp =  np.where(k <= self.limit_k[j])[0]
             if tmp.size == 0:
                 break
             ind[j+1] = np.max(tmp)
-            full_spectrum[ ind[j] : ind[j+1] ] =  self.spectrum0(j, k[ind[j]:ind[j+1]])
+            ryabkova[ ind[j] : ind[j+1] ] =  self.spectrum0(j, k[ind[j]:ind[j+1]])
 
-        full_spectrum[ind[-1]:] = self.spectrum0(n, k[ind[-1]:])
-        return full_spectrum
+        ryabkova[ind[-1]:] = self.spectrum0(n, k[ind[-1]:])
+
+        return ryabkova
+    
+
+    def  find_friction(self):
+
+        # Finds zeroes, X - friction velocity, Z - height, Karman's constant = 0.4
+        z = 10
+        f = lambda x: x/0.4 * np.log(z/(0.684/x + 428e-7* x**2 - 443e-4))
+        root = optimize.ridder( f, 1e-8, 80)
+        return root
+
+        
+    def kontrast(self, k, beta0, sigma_w, sigma_m, e):
+
+        g = 981
+        R = 1
+        nu = 0.01
+
+        def gamma(k, e, omega):
+
+            Rw = R * np.power(omega, 2)
+
+            x1 = 2*nu*k**2/omega 
+            x2 =  e * np.power(k, 3) * np.sqrt(x1) / Rw
+            x3 = 1 * x2 * e * np.power(k, 3) / ( 2 * x1 * Rw )
+            x4 = 2 * x2
+            x5 = 2 * x2 * e * np.power(k, 3) / ( 1 * np.sqrt(x1) * Rw )
+
+            return 2*nu*k**2*(x1 - x2 + x3)/(x1 - x4+ x5)
+        
+        omega_w = np.sqrt(g*k + sigma_w/R * np.power(k, 3))
+        omega_m = np.sqrt(g*k + sigma_m/R * np.power(k, 3))
+
+
+
+        G0 = gamma(k, 0, omega_w)
+        G1 = gamma(k, e, omega_m)
+
+
+        uftr = self.find_friction()
+        beta = beta0*np.power(k*uftr, 2)/omega_w
+
+
+        return np.abs( (beta - np.minimum(G0, G1) ) / (beta - np.maximum(G0, G1)) )
+        
+    
+    def with_slick(self, k):
+        beta0 = self.rc.slick.beta0
+        sigma_w = self.rc.slick.sigmaWater
+        sigma_m = self.rc.slick.sigmaOil
+        sigma = self.rc.slick.sigma
+
+        return self.kontrast(k/100, beta0, sigma_w, sigma_m, sigma)
+
 
     def full_spectrum0(self, k):
 
