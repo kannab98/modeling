@@ -21,6 +21,19 @@ import math
 TPB=16
 if GPU:
     @cuda.jit
+    def kernel_cwm_offset(x, y, k, phi, A, F, psi):
+        if i >= x.shape[0]:
+            return
+
+        for n in range(k.size): 
+            for m in range(phi.size):
+                kr = k[n]*(x[i]*math.cos(phi[m]) + y[i]*math.sin(phi[m]))      
+                Af = A[n] * F[n][m]
+                Sin =  math.sin(kr + psi[n][m]) * Af
+                x[i] += -Sin * math.cos(phi[m])
+                y[i] += -Sin * math.sin(phi[m])
+
+    @cuda.jit
     def kernel_cwm(ans, x, y, k, phi, A, F, psi):
         i = cuda.grid(1)
 
@@ -46,8 +59,8 @@ if GPU:
                     ans[2,i] +=  -Sin * ky
 
                     # CWM
-                    x[i] += -Sin * math.cos(phi[m])
-                    y[i] += -Sin * math.sin(phi[m])
+                    x[i] += -100*Sin * math.cos(phi[m])
+                    y[i] += -100*Sin * math.sin(phi[m])
                     ans[1,i] *= 1 - Cos * math.cos(phi[m]) * kx
                     ans[2,i] *= 1 - Cos * math.sin(phi[m]) * ky
 
@@ -103,7 +116,6 @@ def run_kernels(kernel,  surface: object):
     model_coeffs = surface.export()
     k = model_coeffs[0]
 
-
     edge = surface.spectrum.KT
 
     edge = [ np.max(np.where(k <= edge[i] )) for i in range(1, edge.size)]
@@ -127,11 +139,37 @@ def run_kernels(kernel,  surface: object):
         process[j].start()
 
 
+
+
     # wait until process funished
     for j in range(N):
         process[j].join()
 
+    # # Экспериментальная часть 
+    if (X.flatten() - X0[0]).any() != 0:
+        for j in range(N):
+            # Срез массивов коэффициентов по оси K, условие !=1 для phi (он не зависит от band)
+            host_constants = tuple([ model_coeffs[i][edge[j]:edge[j+1]] if i !=1 else model_coeffs[i] for i in range(len(model_coeffs))])
+            # Create shared array
+            arr_share = Array('d', 3*X.size )
+            X_share = Array('d', X.size)
+            Y_share = Array('d', Y.size)
+            # arr_share and arr share the same memory
+            arr[j] = np.frombuffer( arr_share.get_obj() ).reshape((3, X.size)) 
+            X0[j] = np.frombuffer( X_share.get_obj() )
+            Y0[j] = np.frombuffer( Y_share.get_obj() )
+            np.copyto(X0[j], X.flatten())
+            np.copyto(Y0[j], Y.flatten())
 
+            dx = X.flatten() - X0[j]
+            process[j] = Process(target = init_kernel, args = (kernel, arr[j], X.flatten() - X0[j], 2*Y.flatten() - Y0[j], host_constants) )
+            process[j].start()
+
+
+
+        # wait until process funished
+        for j in range(N):
+            process[j].join()
 
     # print(arr[0][0], arr[1][0])
 
@@ -284,28 +322,27 @@ class Surface():
     def _staticMoments(self, x0, y0, surface):
 
         corr = np.cov(surface[1], surface[2])
-        moments = (np.var(surface[0]), corr[0][0], corr[1][1], corr[0][0]+corr[1][1], corr[0][1])
-        # self._var, self._sigmaxx, self._sigmayy, self._sigmaxy = moments
+        moments = (np.mean(surface[0]), np.var(surface[0]), corr[0][0], corr[1][1], corr[0][0]+corr[1][1])
+        self._mean, self._var, self._sigmaxx, self._sigmayy  = moments[:-1]
         return moments
 
-    def _theoryStaticMoments(self, band):
+    def _theoryStaticMoments(self, band, stype="ryabkova"):
 
-        KT = self.spectrum.kEdges(self.spectrum.k_m, band)
-        S = self.spectrum.get_spectrum
+
         Fx = lambda phi, k: self.Phi(k, phi) * np.cos(phi)**2
         Fy = lambda phi, k: self.Phi(k, phi) * np.sin(phi)**2
         Fxy = lambda phi, k: self.Phi(k, phi) * np.sin(phi)*np.cos(phi)
         Q = lambda phi, k: F(phi, k)* S(k) * k**2 
 
-        self._tvar = self.spectrum.quad(0)
-        self._tsigma = self.spectrum.quad(2)
-        self._tsigmaxx = self.spectrum.dblquad(Fx)
-        self._tsigmayy = self.spectrum.dblquad(Fy)
-        self._tsigmaxy = self.spectrum.dblquad(Fxy)
+        self._tvar = self.spectrum.quad(0, stype)
+        self._tsigma = self.spectrum.quad(2, stype)
+        self._tsigmaxx = self.spectrum.dblquad(Fx, stype)
+        self._tsigmayy = self.spectrum.dblquad(Fy, stype)
+        # self._tsigmaxy = self.spectrum.dblquad(Fxy, stype)
         # self._tsigma = self._tsigmaxx + self._tsigmayy
         # self._tvar = 0.0081/2 * integrate.quad(lambda x: S(x), KT[0], KT[1], epsabs=1e-6)[0]
-        moments = self._tvar, self._tsigmaxx, self._tsigmayy, self._tsigma, self._tsigmaxy
-
+        # moments = self._tvar, self._tsigmaxx, self._tsigmayy, self._tsigma, self._tsigmaxy
+        # print(moments, self.spectrum.band)
         return moments
     
     def angleCorrection(self, theta):
@@ -314,10 +351,13 @@ class Surface():
         z = self._rc["antenna"]["z"]
         theta =  np.arcsin( (R+z)/R * np.sin(theta) )
         return theta
+    
+    # def cwmCorrection(self, moments):
+        
 
-    def crossSection(self, theta, moments): 
+    def crossSection(self, theta, moments, ): 
         var = moments[1:]
-        theta = self.angleCorrection(theta)
+        # theta = self.angleCorrection(theta)
         # Коэффициент Френеля
         F = 0.8
         sigma =  F**2/( 2*np.cos(theta)**4 * np.sqrt(var[0]*var[1] - var[2]**2) )

@@ -2,67 +2,27 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-
 from scipy import interpolate, integrate, optimize
 from json import load,  dump
+
+from modeling import rc
 
 
 """
 Спектр ветрового волнения и зыби. Используется при построении морской поверхности. 
 """
 
+g = rc.constants.gravityAcceleration
 
 class Spectrum():
-    @staticmethod
-    def __json2object__(file):
+    def __init__(self):
 
-        """
-        Преобразование полей конфигурационного файла rc.json 
-        в объекты класса и присвоение им соответствующих значений
-
-
-        Файл из json вида:
-
-            >> { ... "swell": { ... "speed": [ 10, ... ] }, ... }
-
-        преобразуется в переменную __rc__ типа dict, поля выделенные под размерности и комментарии отбрасываются):
-
-            >> __rc__["swell"] = { ... , "speed": 10 } 
-
-        после словарь __rc__ становится объектом класса:
-
-            >> rc.swell.speed
-            >> out: 10
-        """
-        with open(file) as f:
-            __rc__ = load(f)
-
-        rc = type('NoneType', (object,), {})()
-
-
-        for Key, Value in __rc__.items():
-            setattr(rc, Key, type('rc', (object,), {}))
-            for key, value in Value.items():
-                __rc__[Key][key] = value[0]
-                attr = getattr(rc, Key)
-                setattr(attr, key, value[0])
-        
-        return rc
-
-    def __init__(self,**kwargs):
-
-
-        config  = kwargs["config"] if "config" in kwargs else os.path.join(os.path.abspath(os.getcwd()), "rc.json")
-        self.rc = self.__json2object__(config)
-
-        x = self.rc.surface.nonDimWindFetch
+        x = rc.surface.nonDimWindFetch
         self._nonDimWindWetch = x
-        self.band = self.rc.surface.band
-        self.g = self.rc.constants.gravityAcceleration
-
-        self.windSpeed = self.rc.wind.speed
-        self.wind= self.rc.wind
-        self.swell= self.rc.swell
+        self.band = rc.surface.band
+        self.windSpeed = rc.wind.speed
+        self.wind= rc.wind
+        self.swell= rc.swell
         self.peakUpdate()
 
     @staticmethod
@@ -115,19 +75,17 @@ class Spectrum():
         return edges
 
     def peakUpdate(self):
-        x = self.rc.surface.nonDimWindFetch
+        x = rc.surface.nonDimWindFetch
         U = self.windSpeed
         # коэффициент gamma (см. спектр JONSWAP)
         self._gamma = self.Gamma(x)
         # коэффициент alpha (см. спектр JONSWAP)
         self._alpha = self.Alpha(x)
         # координата пика спектра по частоте
-        self.omega_m = self.Omega(x) * self.g/U
+        self.omega_m = self.Omega(x) * g / U
         # координата пика спектра по волновому числу
-        self.k_m = self.omega_m**2/self.g
-        # print("begin", self.k_m)
+        self.k_m = self.omega_m**2 / g
 
-        # print(self.band)
         # длина доминантной волны
         self.lambda_m = 2 * np.pi / self.k_m
         # массив с границами моделируемого спектра.
@@ -139,18 +97,15 @@ class Spectrum():
 
         limit = np.zeros(5)
         limit[0] = 1.2 * self.omega_m
-        # limit[1] = (
-        #     + 0.371347584096022408
-        #     + 0.290241610467870486 * U
-        #     + 0.290178032985796564 / U) * self.omega_m
         limit[1] = ( 0.8*np.log(U) + 1 ) * self.omega_m
         limit[2] = 20.0
         limit[3] = 81.0
         limit[4] = 500.0
 
 
-        self.limit_k = np.array([self.find_decision(limit[i]) for i in range(limit.size)])
-        self.limit_k = self.limit_k[np.where(self.limit_k <= self.KT.max())]
+        __limit_k = np.array([self.find_decision(limit[i]) for i in range(limit.size)])
+        self.limit_k = __limit_k[np.where(__limit_k <= self.KT.max())]
+        del __limit_k, limit
 
 
     def plot(self, stype="ryabkova"):
@@ -201,33 +156,32 @@ class Spectrum():
         return spectrum
 
     def find_decision(self, omega):
-        # P = self.g * 1000.0/0.074
-        # Q = -1000.0*omega**2/0.074
-        # x1 = -Q/2.0 + np.sqrt((Q/2)**2 + (P/3)**3)
-        # x2 = -Q/2.0 - np.sqrt((Q/2)**2 + (P/3)**3)
-        # k = x1**(1/3)-(-x2)**(1/3)
-        # print(k)
 
-        p = [74e-6, 0, self.g, omega**2]
+        """
+        Поиск корней полинома третьей степени. 
+        Возвращает сумму двух комплексно сопряженных корней
+
+        """
+        p = [74e-6, 0, g, omega**2]
         k = np.roots(p)
         return 2*np.real(k[0])
 
     def det(self, k):
         #        Функция возвращает Якобиан при переходе от частоты к
         #    волновым числам по полному дисперсионному уравнению
-        det = (self.g + 3*k**2*0.074/1000) / \
-            (2*np.sqrt(self.g*k+k**3*0.074/1000))
+        det = (g + 3*k**2*0.074/1000) / \
+            (2*np.sqrt(g*k+k**3*0.074/1000))
         return det
 
     def k_max(self, omega_max):
         # k_max -- координата пика спектра
-        k_max = omega_max**2/self.g
+        k_max = omega_max**2/g
         return k_max
 
     def omega_k(self, k):
         #    Пересчет волнового числа в частоту по полному дисперсионному
         # уравнению
-        omega_k = (self.g*k+0.074*k**3/1000)**(1/2)
+        omega_k = (g*k+0.074*k**3/1000)**(1/2)
         return omega_k
 
 
@@ -246,7 +200,6 @@ class Spectrum():
         )
 
 
-        # print("end", self.k_m)
         # Sw =  k**(-3)* np.exp( -1.25 * (self.k_m/k)**2 ) 
         return  Sw 
     # Безразмерный коэффициент Gamma
@@ -307,7 +260,7 @@ class Spectrum():
             omega0 = self.omega_k(k)
             return beta0/omega0**power[n-1]*self.det(k)
     
-    def quad(self, p):
+    def quad(self, p, stype="ryabkova"):
 
         func = lambda k, i: self.spectrum0(i,k) * k**p
 
@@ -333,42 +286,70 @@ class Spectrum():
             print(i)
             var[i] = integrate.quad(func, -np.pi, np.pi, args=(k[i]))[0]
         return var
-    def dblquad(self, func):
+    def dblquad(self, func, stype="ryabkova"):
 
 
-        # var = integrate.dblquad(
-        #                                    lambda phi, k: func(phi, k)*,  
-        #                                    a=self.limit_k[1], b=self.limit_k[2],
-        #                                    gfun=lambda phi: -np.pi, 
-        #                                    hfun=lambda phi:  np.pi)[0]
 
-        # S = lambda k: self.spectrum0(0,k) * k**2
+        S = lambda k: self.spectrum0(0,k) * k**2
 
-        # var = integrate.dblquad(
-        #                                    lambda phi, k: func(phi, k)*S(k),  
-        #                                    a=self.KT[0], b=self.limit_k[0],
-        #                                    gfun=lambda phi: -np.pi, 
-        #                                    hfun=lambda phi:  np.pi)[0]
-        # for i in range(1, self.limit_k.size):
-        #     S = lambda k: self.spectrum0(i,k) * k**2
-        #     var += integrate.dblquad(
-        #                                     lambda phi, k: func(phi, k)*S(k),  
-        #                                     a=self.limit_k[i-1], b=self.limit_k[i],
-        #                                     gfun=lambda phi: -np.pi, 
-        #                                     hfun=lambda phi:  np.pi)[0]
+        var = integrate.dblquad(
+                                           lambda phi, k: func(phi, k)*S(k),  
+                                           a=self.KT[0], b=self.limit_k[0],
+                                           gfun=lambda phi: -np.pi, 
+                                           hfun=lambda phi:  np.pi)[0]
 
-        # return var
-
-        # var = integrate.dblquad(
-        #                                    func,
-        #                                    a=-np.pi, b=np.pi,
-        #                                    gfun=lambda k: self.limit_k[1], 
-        #                                    hfun=lambda k: self.limit_k[3]
-        # )[0]
+        for i in range(1, self.limit_k.size):
+            S = lambda k: self.spectrum0(i,k) * k**2
+            var += integrate.dblquad(
+                                            lambda phi, k: func(phi, k)*S(k),  
+                                            a=self.limit_k[i-1], b=self.limit_k[i],
+                                            gfun=lambda phi: -np.pi, 
+                                            hfun=lambda phi:  np.pi)[0]
 
 
-        var = integrate.quad(func, -np.pi, np.pi, args=(self.KT[0]))[0] * self.quad(2)
+        S = lambda k: self.spectrum0(self.limit_k.size, k) * k**2
+        var += integrate.dblquad(
+                                            lambda phi, k: func(phi, k)*S(k),  
+                                            a=self.limit_k[-1], b=self.KT[-1],
+                                            gfun=lambda phi: -np.pi, 
+                                            hfun=lambda phi:  np.pi)[0]
+
         return var
+
+    def partdblquad(self, func, a, b):
+
+
+
+        S = lambda k: self.spectrum0(0,k) * k**2
+
+        var = integrate.dblquad(
+                                           lambda phi, k: func(phi, k) * S(k) * k**(a+b-1) * np.cos(phi)**a * np.sin(phi)**b,
+                                           a=self.KT[0], b=self.limit_k[0],
+                                           gfun=lambda phi: -np.pi, 
+                                           hfun=lambda phi:  np.pi)[0]
+
+        for i in range(1, self.limit_k.size):
+            S = lambda k: self.spectrum0(i,k) * k**2
+            var += integrate.dblquad(
+                                            lambda phi, k: func(phi, k) * S(k) * k**(a+b-1) * np.cos(phi)**a * np.sin(phi)**b,
+                                            a=self.limit_k[i-1], b=self.limit_k[i],
+                                            gfun=lambda phi: -np.pi, 
+                                            hfun=lambda phi:  np.pi)[0]
+
+
+        S = lambda k: self.spectrum0(self.limit_k.size, k) * k**2
+        var += integrate.dblquad(
+                                            lambda phi, k: func(phi, k) * S(k) * k**(a+b-1) * np.cos(phi)**a * np.sin(phi)**b,
+                                            a=self.limit_k[-1], b=self.KT[-1],
+                                            gfun=lambda phi: -np.pi, 
+                                            hfun=lambda phi:  np.pi)[0]
+
+        return var
+
+
+
+        # var = integrate.quad(func, -np.pi, np.pi, args=(self.KT[0]))[0] * self.quad(2, stype)
+        # return var
 
 
     def ryabkova(self, k):
@@ -392,6 +373,12 @@ class Spectrum():
 
         return ryabkova
     
+    @staticmethod
+    def __wind__(x, z):
+        f = lambda x, z: x/0.4 * np.log(z/(0.684/x + 428e-7* x**2 - 443e-4))
+        return f(x,z)
+
+
 
     def  find_friction(self):
 
@@ -432,15 +419,50 @@ class Spectrum():
         uftr = self.find_friction()
         beta = beta0*np.power(k*uftr, 2)/omega_w
 
+        # kontrast = 0.1 * np.ones(k.size)
+        # slick_kontrast = 0
 
+        # flag = True
+        # for i in range(k.size):
+        #     if (beta[i] > 2*G0[i]) & (beta[i] > 2*G1[i]):
+        #         kontrast[i] = (beta[i] - 2*G1[i])/(beta[i] - 2*G0[i])
+
+        #         print(kontrast[i])
+        #     elif (beta[i] < 2*G0[i]) & (beta[i] < 2*G1[i]):
+        #         kontrast[i] = (2*G0[i] - beta[i]) / (2*G1[i] - beta[i])
+        #         print(kontrast[i])
+        #     else:
+        #         flag = False
+            
+        #     if flag:
+        #         slick_kontrast = kontrast[i]
+        #     else:
+        #         kontrast[i] *= slick_kontrast
+        #         print(kontrast[i])
+
+
+
+        # ind = np.where( (beta > 2*G0) & (beta > 2*G1) )[0]
+        # if len(ind) != 0:
+        #     kontrast[ind] = \
+        #         (beta - 2*G1[ind])/(beta - 2*G0[ind])
+
+        # ind = np.where( (beta < 2*G0) & (beta < 2*G1) )[0]
+        # print(ind)
+        # if len(ind) != 0:
+        #     kontrast[ind] = \
+        #         (beta - 2*G0[ind])/(beta - 2*G1[ind])
+
+
+        # return kontrast
         return np.abs( (beta - np.minimum(G0, G1) ) / (beta - np.maximum(G0, G1)) )
         
     
     def with_slick(self, k):
-        beta0 = self.rc.slick.beta0
-        sigma_w = self.rc.slick.sigmaWater
-        sigma_m = self.rc.slick.sigmaOil
-        sigma = self.rc.slick.sigma
+        beta0 = rc.slick.beta0
+        sigma_w = rc.slick.sigmaWater
+        sigma_m = rc.slick.sigmaOil
+        sigma = rc.slick.sigma
 
         return self.kontrast(k/100, beta0, sigma_w, sigma_m, sigma)
 
@@ -462,10 +484,10 @@ class Spectrum():
 
     def swell_spectrum(self, k):
 
-        omega_m = self.Omega(20170) * self.g/self.U10
+        omega_m = self.Omega(20170) * g/self.U10
         W = np.power(omega_m/self.omega_k(k), 5)
 
-        sigma_sqr = 0.0081 * self.g**2 * np.exp(-0.05) / (6 * omega_m**4)
+        sigma_sqr = 0.0081 * g**2 * np.exp(-0.05) / (6 * omega_m**4)
         spectrum = 6 * sigma_sqr * W / \
             self.omega_k(k) * np.exp(-1.2 * W) * self.det(k)
         return spectrum

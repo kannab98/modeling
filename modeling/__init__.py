@@ -2,7 +2,7 @@ from json import load
 
 class rcParams():
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         pass
 
     @staticmethod
@@ -29,7 +29,7 @@ class rcParams():
         with open(file) as f:
             __rc__ = load(f)
 
-        rc = type('NoneType', (object,), {})()
+        rc = type('Config', (object,), {})()
 
 
         for Key, Value in __rc__.items():
@@ -42,4 +42,5 @@ class rcParams():
         return rc
 
 
-rc = rcParams()
+# config  = kwargs["config"] if "config" in kwargs else os.path.join(os.path.abspath(os.getcwd()), "rc.json")
+rc = rcParams.__json2object__("rc.json")
