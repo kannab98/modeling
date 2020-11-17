@@ -1,12 +1,44 @@
 from json import load
+import collections
+
+# Замена дефолтному property
+class dispatcher(object):
+
+    def __init__(self, attr):
+        self.attr = attr
+        self.__call = []
+    
+    @property 
+    def call(self):
+        return self.__call
+
+    def __get__(self, obj, objtype):
+        print(self)
+        print(obj)
+        return getattr(obj, self.attr)
+
+    def __set__(self, obj, value):
+        print(self)
+        print(obj)
+        # self = dispatcher
+        # obj = Foo
+        for func in self.call:
+            if type(func).__name__ == "function":
+                func(value)
+
+        setattr(obj, self.attr, value )
+
 
 class rcParams():
 
     def __init__(self, **kwargs):
-        pass
+        self.__json2object__("rc.json")
+        self.callbacks = {}
+        self.callbacks = {}
 
-    @staticmethod
-    def __json2object__(file):
+
+
+    def __json2object__(self, file):
 
 #     """
 #     Преобразование полей конфигурационного файла rc.json 
@@ -33,14 +65,68 @@ class rcParams():
 
 
         for Key, Value in __rc__.items():
-            setattr(rc, Key, type('rc', (object,), {}))
+            # Старая версия
+            # setattr(self, Key, type('rc', (object,), {}))
+            # Моя версия
+            setattr(self, Key, dispatcher(Key))
+            attr = getattr(self, Key)
             for key, value in Value.items():
                 __rc__[Key][key] = value[0]
-                attr = getattr(rc, Key)
                 setattr(attr, key, value[0])
-        
+
+        wind = self.wind
+        print(type(wind))
+
+
+        # print(self.wind.speed) # setattr(self.wind, "speed", dispatcher("speed")) self.wind.speed = dispatcher("speed")
+       
+        # print(self.wind.speed)
+        # self.wind = dispatcher("wind")
+
+
+
         return rc
+
+# Кастомный list
+# class alist(collections.UserList):
+#     def __init__(self, *args, **kwargs):
+#         data = kwargs.pop('data')
+#         super().__init__(self, *args, **kwargs)
+#         self.data = data
+
+#     def append(self, item):
+#         print('No appending allowed.')
+#         return self.data.append(item)
+
+
+
+# def getset(name, getting, setting):
+#     return property(lambda self: getting(getattr(self, name)),
+#                     lambda self, val: setattr(self, name, setting(val)))
+name = "wind"
+val = 10
+class Foo(object):                                   
+
+    def __init__(self):               
+        self.wind = None
+
+    
+
+    # value.call.append(lambda x: x)
+
+
+
+# d = Foo()
+# d.wind.call.append(lambda x: x)
+# def fset(self, val):
+#     print("kek")
+#     return None
+
+# d.fset = fset
+# d.value = 15
+
 
 
 # config  = kwargs["config"] if "config" in kwargs else os.path.join(os.path.abspath(os.getcwd()), "rc.json")
-rc = rcParams.__json2object__("rc.json")
+rc = rcParams()
+print(rc.wind)
