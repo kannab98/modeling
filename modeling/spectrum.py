@@ -5,24 +5,31 @@ import os
 from scipy import interpolate, integrate, optimize
 from json import load,  dump
 
-from modeling import rc
+from . import rc
+
+
 
 
 """
 Спектр ветрового волнения и зыби. Используется при построении морской поверхности. 
 """
 
+def Omega(x):
+    if x >= 20170:
+        return 0.835
+
+    omega_tilde = (0.61826357843576103
+                    + 3.52883010586243843e-06*x
+                    - 0.00197508032233982112*np.sqrt(x)
+                    + 62.5540113059129759/np.sqrt(x)
+                    - 290.214120684236224/x
+                    )
+    return omega_tilde
+
 g = rc.constants.gravityAcceleration
 
 class Spectrum():
     def __init__(self):
-
-        x = rc.surface.nonDimWindFetch
-        self._nonDimWindWetch = x
-        self.band = rc.surface.band
-        self.windSpeed = rc.wind.speed
-        self.wind= rc.wind
-        self.swell= rc.swell
         self.peakUpdate()
 
     @staticmethod
@@ -74,24 +81,25 @@ class Spectrum():
         edges = np.array([ bands_edges[i](k_m) for i in range(bands[band]+1)])
         return edges
 
-    def peakUpdate(self):
-        x = rc.surface.nonDimWindFetch
-        U = self.windSpeed
+    def peakUpdate(self, x=rc.surface.nonDimWindFetch, U=rc.wind.speed):
+        self.U10 = U
         # коэффициент gamma (см. спектр JONSWAP)
         self._gamma = self.Gamma(x)
         # коэффициент alpha (см. спектр JONSWAP)
         self._alpha = self.Alpha(x)
-        # координата пика спектра по частоте
-        self.omega_m = self.Omega(x) * g / U
-        # координата пика спектра по волновому числу
-        self.k_m = self.omega_m**2 / g
 
+        # координата пика спектра по волновому числу
+        self.k_m = (Omega(x) / U)**2  * g 
+        self.peak = self.k_m
+        # координата пика спектра по частоте
+        self.omega_m = Omega(x) * g / U
         # длина доминантной волны
         self.lambda_m = 2 * np.pi / self.k_m
-        # массив с границами моделируемого спектра.
-        self.KT = self.kEdges(self.k_m, self.band)
-        # k0 -- густая сетка, нужна для интегрирования и интерполирования
 
+        # массив с границами моделируемого спектра.
+        self.KT = self.kEdges(self.k_m, rc.surface.band)
+
+        # k0 -- густая сетка, нужна для интегрирования и интерполирования
         self.k0 = np.logspace(
             np.log10(self.KT[0]), np.log10(self.KT[-1]), 10**5)
 
@@ -117,12 +125,12 @@ class Spectrum():
 
     @property
     def nonDimWindFetch(self):
-        return self._surface.nonDimWindFetch
+        return rc.surface.nonDimWindFetch
 
     @nonDimWindFetch.setter
     def nonDimWindFetch(self, x):
-        self._surface.nonDimWindFetch = x
-        self.peakUpdate()
+        rc.surface.nonDimWindFetch = x
+        self.peakUpdate(x=x)
 
     @property
     def windSpeed(self):
@@ -131,7 +139,8 @@ class Spectrum():
     @windSpeed.setter
     def windSpeed(self, U10):
         self.U10 = U10
-        self.peakUpdate()
+        rc.wind.speed = U10
+        self.peakUpdate(U=U10)
 
     def get_spectrum(self, stype="ryabkova"):
         # self.peakUpdate()
@@ -202,6 +211,7 @@ class Spectrum():
 
         # Sw =  k**(-3)* np.exp( -1.25 * (self.k_m/k)**2 ) 
         return  Sw 
+
     # Безразмерный коэффициент Gamma
     def Gamma(self, x):
         if x >= 20170:
@@ -230,23 +240,14 @@ class Spectrum():
         return alpha[0]
 
     # Вычисление безразмерной частоты Omega по безразмерному разгону x
-    def Omega(self, x):
-        if x >= 20170:
-            return 0.835
-        omega_tilde = (0.61826357843576103
-                       + 3.52883010586243843e-06*x
-                       - 0.00197508032233982112*np.sqrt(x)
-                       + 62.5540113059129759/np.sqrt(x)
-                       - 290.214120684236224/x
-                       )
-        return omega_tilde
+
 
     def spectrum0(self, n, k):
         power = [   
                     4, 
                     5, 
-                    7.647*np.power(self.windSpeed, -0.237), 
-                    0.0007*np.power(self.windSpeed, 2) - 0.0348*self.windSpeed + 3.2714,
+                    7.647*np.power(rc.wind.speed, -0.237), 
+                    0.0007*np.power(rc.wind.speed, 2) - 0.0348*rc.wind.speed + 3.2714,
                     5
                 ]
 
@@ -288,8 +289,7 @@ class Spectrum():
         return var
     def dblquad(self, func, stype="ryabkova"):
 
-
-
+        print("начальные:", self.limit_k)
         S = lambda k: self.spectrum0(0,k) * k**2
 
         var = integrate.dblquad(
@@ -297,6 +297,8 @@ class Spectrum():
                                            a=self.KT[0], b=self.limit_k[0],
                                            gfun=lambda phi: -np.pi, 
                                            hfun=lambda phi:  np.pi)[0]
+        print("##############################")
+        print(self.KT[0], self.limit_k[0], var)
 
         for i in range(1, self.limit_k.size):
             S = lambda k: self.spectrum0(i,k) * k**2
@@ -305,6 +307,8 @@ class Spectrum():
                                             a=self.limit_k[i-1], b=self.limit_k[i],
                                             gfun=lambda phi: -np.pi, 
                                             hfun=lambda phi:  np.pi)[0]
+            print(self.limit_k[i-1], self.limit_k[i], var)
+
 
 
         S = lambda k: self.spectrum0(self.limit_k.size, k) * k**2
@@ -313,33 +317,34 @@ class Spectrum():
                                             a=self.limit_k[-1], b=self.KT[-1],
                                             gfun=lambda phi: -np.pi, 
                                             hfun=lambda phi:  np.pi)[0]
+        print(self.limit_k[-1], self.KT[-1], var)
+        print("##############################")
 
         return var
 
-    def partdblquad(self, func, a, b):
+    def partdblquad(self, func, a, b, c):
 
-
-
-        S = lambda k: self.spectrum0(0,k) * k**2
+        S = lambda k: self.spectrum0(0, k)
+        Phi = lambda phi, k: func(phi, k) * np.cos(phi)**a * np.sin(phi)**b
 
         var = integrate.dblquad(
-                                           lambda phi, k: func(phi, k) * S(k) * k**(a+b-1) * np.cos(phi)**a * np.sin(phi)**b,
+                                           lambda phi, k: Phi(phi, k) * S(k) * k**(a+b-c) * np.cos(phi)**a * np.sin(phi)**b,
                                            a=self.KT[0], b=self.limit_k[0],
                                            gfun=lambda phi: -np.pi, 
                                            hfun=lambda phi:  np.pi)[0]
 
         for i in range(1, self.limit_k.size):
-            S = lambda k: self.spectrum0(i,k) * k**2
+            S = lambda k: self.spectrum0(i,k)
             var += integrate.dblquad(
-                                            lambda phi, k: func(phi, k) * S(k) * k**(a+b-1) * np.cos(phi)**a * np.sin(phi)**b,
+                                            lambda phi, k: Phi(phi, k) * S(k) * k**(a+b-c) * np.cos(phi)**a * np.sin(phi)**b,
                                             a=self.limit_k[i-1], b=self.limit_k[i],
                                             gfun=lambda phi: -np.pi, 
                                             hfun=lambda phi:  np.pi)[0]
 
 
-        S = lambda k: self.spectrum0(self.limit_k.size, k) * k**2
+        S = lambda k: self.spectrum0(self.limit_k.size, k)
         var += integrate.dblquad(
-                                            lambda phi, k: func(phi, k) * S(k) * k**(a+b-1) * np.cos(phi)**a * np.sin(phi)**b,
+                                            lambda phi, k: Phi(phi, k) * S(k) * k**(a+b-c) * np.cos(phi)**a * np.sin(phi)**b,
                                             a=self.limit_k[-1], b=self.KT[-1],
                                             gfun=lambda phi: -np.pi, 
                                             hfun=lambda phi:  np.pi)[0]

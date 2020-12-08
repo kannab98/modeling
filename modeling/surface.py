@@ -5,9 +5,13 @@ import scipy as sp
 from json import load,  dump
 
 from tqdm import tqdm
-from .spectrum import Spectrum
+
+# from .spectrum import Spectrum
+from . import rc, spectrum
+
 import matplotlib.pyplot as plt
 import os
+
 
 try:
     from numba import cuda
@@ -254,13 +258,17 @@ class Surface():
 
         self.direction = []
 
-        if spectrum.wind.enable:
-            self.direction.append(np.deg2rad(spectrum.wind.direction))
+        if rc.wind.enable:
+            self.direction.append(np.deg2rad(rc.wind.direction))
 
-        if spectrum.swell.enable:
-            self.direction.append(np.deg2rad(spectrum.swell.direction))
+        if rc.swell.enable:
+            self.direction.append(np.deg2rad(rc.swell.direction))
 
         self.direction = np.array(self.direction)
+        if self.direction[0] > np.pi:
+            self.direction[0] = 2*np.pi - self.direction[0] 
+        elif self.direction[0] < -np.pi:
+            self.direction[0] = 2*np.pi + self.direction[0] 
 
         # print(self.direction)
 
@@ -323,6 +331,7 @@ class Surface():
 
         corr = np.cov(surface[1], surface[2])
         moments = (np.mean(surface[0]), np.var(surface[0]), corr[0][0], corr[1][1], corr[0][0]+corr[1][1])
+        print(moments)
         self._mean, self._var, self._sigmaxx, self._sigmayy  = moments[:-1]
         return moments
 
@@ -334,15 +343,16 @@ class Surface():
         Fxy = lambda phi, k: self.Phi(k, phi) * np.sin(phi)*np.cos(phi)
         Q = lambda phi, k: F(phi, k)* S(k) * k**2 
 
-        self._tvar = self.spectrum.quad(0, stype)
+        # self._tvar = self.spectrum.quad(0, stype)
         self._tsigma = self.spectrum.quad(2, stype)
         self._tsigmaxx = self.spectrum.dblquad(Fx, stype)
         self._tsigmayy = self.spectrum.dblquad(Fy, stype)
         # self._tsigmaxy = self.spectrum.dblquad(Fxy, stype)
         # self._tsigma = self._tsigmaxx + self._tsigmayy
         # self._tvar = 0.0081/2 * integrate.quad(lambda x: S(x), KT[0], KT[1], epsabs=1e-6)[0]
-        # moments = self._tvar, self._tsigmaxx, self._tsigmayy, self._tsigma, self._tsigmaxy
-        # print(moments, self.spectrum.band)
+        # moments = self._tvar, self._tsigmaxx, self._tsigmayy, self._tsigma, self._tsigma
+        moments = self._tsigmaxx, self._tsigmayy
+        # print(moments)
         return moments
     
     def angleCorrection(self, theta):
@@ -357,7 +367,7 @@ class Surface():
 
     def crossSection(self, theta, moments, ): 
         var = moments[1:]
-        # theta = self.angleCorrection(theta)
+        theta = self.angleCorrection(theta)
         # Коэффициент Френеля
         F = 0.8
         sigma =  F**2/( 2*np.cos(theta)**4 * np.sqrt(var[0]*var[1] - var[2]**2) )
@@ -371,7 +381,7 @@ class Surface():
     @nonDimWindFetch.setter
     def nonDimWindFetch(self, x):
         self.spectrum.nonDimWindFetch = x
-        self.spectrum.peakUpdate()
+        self.spectrum.peakUpdate(x=x)
         self.k_m = self.spectrum.k_m
 
 
@@ -544,6 +554,7 @@ class Surface():
         self.k_m = self.spectrum.k_m
         self.A = self.amplitude(self.k)
         self.F = self.angle(self.k, self.phi)
+
         return self.k, self.phi, self.A, self.F, self.psi
 
 
@@ -583,9 +594,6 @@ class Surface():
 
         return (np.sum(S*Z**p)/np.sum(S))
 
-
-
-
 if __name__ == "__main__":
     import sys
     import argparse
@@ -599,8 +607,8 @@ if __name__ == "__main__":
     kernels = [kernel_default]
 
     for U in [5, 10, 15]:
-        surface.windSpeed = U
-        surface.nonDimWindFetch = 900
+        rc.wind.speed = U
+        rc.surface.nonDimWindFetch = 900
         arr, X0, Y0 = run_kernels(kernels, surface)
         for i in range(len(kernels)):
             surface.plot(X0[i], Y0[i], arr[i][0], label="default%s" % (U))

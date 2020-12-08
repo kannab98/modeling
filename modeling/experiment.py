@@ -1,43 +1,31 @@
 import numpy as np
-from .rc import Config, Constants
 from .surface import Surface
 from .surface import kernel_default as kernel_default
+
+from . import rc
 import matplotlib.pyplot as plt
-import datacontrol
 
-from json import load,  dump
 
-class Experiment(Constants):
+class Experiment():
 
     def __init__(self, surface):
 
         self.surface = surface
 
-        with open("rc.json", "r", encoding='utf-8') as f:
-            self._rc = load(f)
-
-        for Key, Value in self._rc.items():
-            for key, value in Value.items():
-                self._rc[Key][key] = value[0]
-
-        vars(self).update(self._rc["antenna"])
-
-        self.constants = Constants()
-    
         self._R = self.position(self.surface_coordinates, self.sattelite_coordinates)
         self._n = self.surface.normal
 
 
 
-        self._gamma = 2*np.sin(self.gainWidth/2)**2/np.log(2)
+        self._gamma = 2*np.sin(rc.antenna.gainWidth/2)**2/np.log(2)
         self._G = self.G(self._R, 
-                            self.polarAngle, 
-                            self.deviation, self._gamma)
+                            rc.antenna.polarAngle, 
+                            rc.antenna.deviation, self._gamma)
 
         self._nabs = self.abs(self._n)
         self._Rabs = self.abs(self._R)
-        self.tau = self._Rabs / self.constants.c
-        self.t0 = self._Rabs.min() / self.constants.c
+        self.tau = self._Rabs / rc.constants.lightSpeed
+        self.t0 = self._Rabs.min() / rc.constants.lightSpeed
 
 
 
@@ -103,11 +91,11 @@ class Experiment(Constants):
         
     @property
     def sattelite_coordinates(self):
-        return np.array([self.x, self.y, self.z])
+        return np.array([rc.antenna.x, rc.antenna.y, rc.antenna.z])
 
     @sattelite_coordinates.setter
     def sattelite_coordinates(self, r):
-        self.x, self.y, self.z = r
+        rc.antenna.x, rc.antenna.y, rc.antenna.z = r
         self._R = self.position(self.surface_coordinates, self.sattelite_coordinates)
         self._Rabs = self.abs(self._R)
 
@@ -183,27 +171,27 @@ class Experiment(Constants):
 
 
 
-kernels = [kernel_default]
-labels = ["default", "cwm"] 
+# kernels = [kernel_default]
+# labels = ["default", "cwm"] 
 
-surface = Surface()
+# surface = Surface()
 
-ex = Experiment(surface)
-z = ex.sattelite_coordinates[-1]
+# ex = Experiment(surface)
+# z = ex.sattelite_coordinates[-1]
 
-U = surface.windSpeed
-g = ex.constants.g
+# U = surface.windSpeed
+# g = ex.constants.g
 
 
 
-surface.spectrum.nonDimWindFetch = 20170
-surface.nonDimWindFetch = 20170
-xi = np.arctan(5000/z)
-Xi = np.deg2rad(np.linspace(-17, 17, 49))
+# surface.spectrum.nonDimWindFetch = 20170
+# surface.nonDimWindFetch = 20170
+# xi = np.arctan(5000/z)
+# Xi = np.deg2rad(np.linspace(-17, 17, 49))
 
-# rc = surface._rc
-# z = rc["antenna"]["z"]
-# R = rc["constants"]["earthRadius"]
+# # rc = surface._rc
+# # z = rc["antenna"]["z"]
+# # R = rc["constants"]["earthRadius"]
 
 
 

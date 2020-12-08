@@ -13,29 +13,25 @@ class dispatcher(object):
         return self.__call
 
     def __get__(self, obj, objtype):
-        print(self)
-        print(obj)
         return getattr(obj, self.attr)
 
     def __set__(self, obj, value):
         print(self)
         print(obj)
-        # self = dispatcher
-        # obj = Foo
         for func in self.call:
             if type(func).__name__ == "function":
                 func(value)
 
         setattr(obj, self.attr, value )
 
-
 class rcParams():
+    with open("rc.json") as f:
+        __rc__ = load(f)
 
     def __init__(self, **kwargs):
         self.__json2object__("rc.json")
         self.callbacks = {}
         self.callbacks = {}
-
 
 
     def __json2object__(self, file):
@@ -61,31 +57,22 @@ class rcParams():
         with open(file) as f:
             __rc__ = load(f)
 
-        rc = type('Config', (object,), {})()
 
 
         for Key, Value in __rc__.items():
-            # Старая версия
-            # setattr(self, Key, type('rc', (object,), {}))
-            # Моя версия
-            setattr(self, Key, dispatcher(Key))
+            setattr(self, Key, type('rc', (object,), {}))
             attr = getattr(self, Key)
+            setattr(attr, "call", {})
             for key, value in Value.items():
-                __rc__[Key][key] = value[0]
                 setattr(attr, key, value[0])
 
-        wind = self.wind
-        print(type(wind))
-
-
-        # print(self.wind.speed) # setattr(self.wind, "speed", dispatcher("speed")) self.wind.speed = dispatcher("speed")
-       
-        # print(self.wind.speed)
-        # self.wind = dispatcher("wind")
 
 
 
-        return rc
+
+
+
+        # return rc
 
 # Кастомный list
 # class alist(collections.UserList):
@@ -95,12 +82,13 @@ class rcParams():
 #         self.data = data
 
 #     def append(self, item):
-#         print('No appending allowed.')
+# #         print('No appending allowed.')
 #         return self.data.append(item)
 
 
 
 # def getset(name, getting, setting):
+
 #     return property(lambda self: getting(getattr(self, name)),
 #                     lambda self, val: setattr(self, name, setting(val)))
 name = "wind"
@@ -108,25 +96,26 @@ val = 10
 class Foo(object):                                   
 
     def __init__(self):               
-        self.wind = None
+        self._wind = 15
+
+
 
     
-
-    # value.call.append(lambda x: x)
-
-
-
+# value.call.append(lambda x: x)
 # d = Foo()
-# d.wind.call.append(lambda x: x)
-# def fset(self, val):
-#     print("kek")
+# print(d.wind)
 #     return None
 
 # d.fset = fset
 # d.value = 15
-
-
+# 
+# 
 
 # config  = kwargs["config"] if "config" in kwargs else os.path.join(os.path.abspath(os.getcwd()), "rc.json")
+
 rc = rcParams()
-print(rc.wind)
+ 
+from .surface import Surface
+from .spectrum import Spectrum
+surface = Surface()
+spectrum = Spectrum()

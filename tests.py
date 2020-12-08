@@ -1,6 +1,7 @@
 from modeling.surface import Surface
 from modeling.surface import kernel_cwm as kernel
 from modeling.surface import run_kernels
+from modeling.retracking import Brown
 
 from modeling.spectrum import Spectrum
 import unittest
@@ -11,6 +12,29 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib
 
+@unittest.skip
+class TestBrown(unittest.TestCase, Surface):
+
+    def test_init(self):
+        Brown()
+    def __init__(self, *args, **kwargs):
+        super(TestBrown, self).__init__(*args, **kwargs)
+        self.brown = Brown()
+    
+    def test_pulse(self):
+        t = self.brown.t()
+        P0 = self.brown.pulse(t)
+        P1 = self.brown.pulse(t, cwm=True)
+
+        plt.plot(t, P0)
+        plt.plot(t, P1)
+        df = pd.DataFrame({"t": t, "linear": P0, "cwm": P1})
+        df.to_csv("impulse_cwm.tsv", sep="\t", index=False)
+
+        plt.savefig("kek")
+
+    
+
 
 
 @unittest.skip
@@ -19,7 +43,12 @@ class TestSurface(unittest.TestCase, Surface):
     def __init__(self, *args, **kwargs):
         super(TestSurface, self).__init__(*args, **kwargs)
         self.surface = Surface()
+    
 
+    def test_kernel(self):
+        arr, X0, Y0 = run_kernels(kernel, self.surface)
+
+    @unittest.skip
     def test_model_moments(self):
         with open("data/Moments.xlsx", "rb") as f:
             self.df = pd.read_excel(f, header=[0,1,2], index_col=[0])
@@ -28,6 +57,7 @@ class TestSurface(unittest.TestCase, Surface):
             self.df = self.df["ryabkova"]
 
     
+    @unittest.skip
     def test_plot_crosssec(self):
         surface = self.surface
         moments = self.df["Ku"]
@@ -36,7 +66,7 @@ class TestSurface(unittest.TestCase, Surface):
         sigma = surface.crossSection(theta, moments)
         
 
-@unittest.skip
+# @unittest.p
 class TestSpectrum(unittest.TestCase, Surface):
 
     def test_init(self):
@@ -46,6 +76,7 @@ class TestSpectrum(unittest.TestCase, Surface):
         super(TestSpectrum, self).__init__(*args, **kwargs)
         self.surface = Surface()
 
+    @unittest.skip
     def test_theoretical(self):
         U = np.linspace(5, 10, 2)
         label = ["var", "xx", "yy", "xx+yy"]
@@ -108,7 +139,7 @@ class TestSpectrum(unittest.TestCase, Surface):
 
 
 
-# @unittest.skip
+@unittest.skip
 class TestMoments(unittest.TestCase, Surface):
 
 
@@ -172,7 +203,7 @@ class TestMoments(unittest.TestCase, Surface):
             self.surface.spectrum.windSpeed =  U[i]
             print(self.surface.spectrum.quad(1))
 
-    # @unittest.skipIf(os.path.isfile("data/ModelMoments.xlsx") == True, "test already complete")
+    @unittest.skipIf(os.path.isfile("data/ModelMoments.xlsx") == True, "test already complete")
     def test_model(self):
         U = np.linspace(5, 10, 2)
         label = ["mean", "var", "xx", "yy", "xx+yy"]
