@@ -1,10 +1,12 @@
 import numpy as np
-from modeling import rc
+from modeling import rc, spectrum
 from modeling.surface import Surface
 import modeling.surface as srf
 from modeling.surface import kernel_default 
 from modeling.experiment import Experiment
 import matplotlib.pyplot as plt
+from scipy.integrate import quad
+
 
 
 kernels = [kernel_default]
@@ -15,13 +17,13 @@ surface = Surface()
 ex = Experiment(surface)
 z = ex.sattelite_coordinates[-1]
 
-U = surface.windSpeed
+U = rc.wind.speed
 g = rc.constants.gravityAcceleration
 
 
 
-surface.spectrum.nonDimWindFetch = 20170
-surface.nonDimWindFetch = 20170
+# spectrum.nonDimWindFetch = 20170
+# surface.nonDimWindFetch = 20170
 xi = np.arctan(5000/z)
 Xi = np.deg2rad(np.linspace(-17, 17, 49))
 
@@ -51,7 +53,7 @@ wind = np.linspace(3,15, Xsize)
 # Xsize = direction.size
 # sigma0 = np.zeros((Xi.size, Xsize))
 # fetch = np.linspace(5000, 20170, Xsize)
-fetch = [10170]
+fetch = [20170]
 direction = np.linspace(-np.pi/2, np.pi/2, 180)
 
 
@@ -63,16 +65,20 @@ sigmaxx = np.zeros(len(fetch))
 sigmayy = np.zeros(len(fetch))
 for j in range(len(fetch)):
     # X, Y, Z = ex.surface_coordinates
-    surface.nonDimWindFetch= fetch[j]
-    # surface.spectrum.peakUpdate(x=fetch[j])
-    print("перед входом:", surface.spectrum.limit_k)
-    # print(surface.nonDimWindFetch, surface.direction)
-    # surface.windSpeed = wind[j]
-    # surface.direction[0] = direction[j]
-    # ex.surface_coordinates = (X,Y,Z)
+    rc.surface.nonDimWindFetch = fetch[j]
+
+    # print(spectrum.k_m, spectrum.limit_k, spectrum.nonDimWindFetch)
+    # print("перед входом:", spectrum.limit_k)
     # arr, X0, Y0 = srf.run_kernels(kernel_default, surface)
     # moments = surface._staticMoments(X0,Y0, arr)
-    sigmaxx[j], sigmayy[j] = surface._theoryStaticMoments(rc.surface.band)
+    # sigmaxx[j], sigmayy[j] = 
+    # spectrum.peakUpdate()
+    # surface._theoryStaticMoments(rc.surface.band)
+    spectrum.cov()
+
+    # Q = lambda phi, k: surface.Phi(k, phi)
+
+
     # sigma0[i][j] = surface.crossSection(xi, moments)
     # X += 5000
 

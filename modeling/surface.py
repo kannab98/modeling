@@ -3,11 +3,10 @@ from numpy import pi
 from scipy import interpolate, integrate
 import scipy as sp
 from json import load,  dump
-
 from tqdm import tqdm
 
-# from .spectrum import Spectrum
-from . import rc, spectrum
+from . import rc
+from . import spectrum
 
 import matplotlib.pyplot as plt
 import os
@@ -198,31 +197,18 @@ class Surface():
 
     def __init__(self, **kwargs):
 
-        config  = kwargs["config"] if "config" in kwargs else os.path.join(os.path.abspath(os.getcwd()), "rc.json")
-
-        with open(config) as f:
-            self._rc = load(f)
-
-        for Key, Value in self._rc.items():
-            for key, value in Value.items():
-                self._rc[Key][key] = value[0]
-
-        vars(self).update(self._rc["surface"])
-        spectrum = Spectrum(**kwargs)
-        self.spectrum = spectrum
-
-        self._x = np.linspace(-self.x, self.x, self.gridSize)
-        self._y = np.linspace(-self.y, self.y, self.gridSize)
+        self._x = np.linspace(-rc.surface.x, rc.surface.x, rc.surface.gridSize)
+        self._y = np.linspace(-rc.surface.y, rc.surface.y, rc.surface.gridSize)
         self._x, self._y = np.meshgrid(self._x, self._y)
         """
         self._z -- высоты морской поверхности
         self._zx -- наклоны X (dz/dx)
         self._zy -- наклоны Y (dz/dy)
         """
-        self._z = np.zeros((self.gridSize, self.gridSize))
-        self._zx = np.zeros((self.gridSize, self.gridSize))
-        self._zy = np.zeros((self.gridSize, self.gridSize))
-        self._zz = np.ones((self.gridSize, self.gridSize))
+        self._z = np.zeros((rc.surface.gridSize, rc.surface.gridSize))
+        self._zx = np.zeros((rc.surface.gridSize, rc.surface.gridSize))
+        self._zy = np.zeros((rc.surface.gridSize, rc.surface.gridSize))
+        self._zz = np.ones((rc.surface.gridSize, rc.surface.gridSize))
 
         # Ссылка на область памяти, где хранятся координаты точек поверхности
         self._r = np.array([
@@ -243,32 +229,20 @@ class Surface():
         self._F = None
         self._Psi = None
 
-        self.N = self.kSize
-        self.M = self.phiSize
-        k_edge = self.kEdge
+        self.N = rc.surface.kSize
+        self.M = rc.surface.phiSize
+        # k_edge = spectrum.kEdge
 
-        random_phases = self.randomPhases
+        random_phases = rc.surface.randomPhases
         kfrag = "log"
-        self.grid_size = self.gridSize
+        self.grid_size = rc.surface.gridSize
 
-        self.k = np.logspace(np.log10(self.spectrum.KT[0]), np.log10(self.spectrum.KT[-1]), self.N + 1)
-        self.k_m = self.spectrum.k_m
+        self.k = np.logspace(np.log10(spectrum.KT[0]), np.log10(spectrum.KT[-1]), self.N + 1)
+
+        self.direction = (np.deg2rad(rc.wind.direction))
 
 
 
-        self.direction = []
-
-        if rc.wind.enable:
-            self.direction.append(np.deg2rad(rc.wind.direction))
-
-        if rc.swell.enable:
-            self.direction.append(np.deg2rad(rc.swell.direction))
-
-        self.direction = np.array(self.direction)
-        if self.direction[0] > np.pi:
-            self.direction[0] = 2*np.pi - self.direction[0] 
-        elif self.direction[0] < -np.pi:
-            self.direction[0] = 2*np.pi + self.direction[0] 
 
         # print(self.direction)
 
@@ -338,21 +312,27 @@ class Surface():
     def _theoryStaticMoments(self, band, stype="ryabkova"):
 
 
-        Fx = lambda phi, k: self.Phi(k, phi) * np.cos(phi)**2
-        Fy = lambda phi, k: self.Phi(k, phi) * np.sin(phi)**2
+        Fx = lambda phi, k: self.Phi(k, phi)  * np.cos(phi)**2
+        Fy = lambda phi, k: self.Phi(k, phi)  * np.sin(phi)**2
         Fxy = lambda phi, k: self.Phi(k, phi) * np.sin(phi)*np.cos(phi)
-        Q = lambda phi, k: F(phi, k)* S(k) * k**2 
+        Q = lambda phi, k: self.Phi(k, phi)
 
         # self._tvar = self.spectrum.quad(0, stype)
-        self._tsigma = self.spectrum.quad(2, stype)
-        self._tsigmaxx = self.spectrum.dblquad(Fx, stype)
-        self._tsigmayy = self.spectrum.dblquad(Fy, stype)
+
+        # print("Before quad", spectrum.k_m, spectrum.limit_k, rc.surface.nonDimWindFetch)
+        # self._tsigma = spectrum.quad(2, stype)
+
+        # print("After quad", spectrum.k_m, spectrum.limit_k, rc.surface.nonDimWindFetch)
+        self._tsigmaxx = spectrum.dblquad(Fx, stype)
+        self._tsigmayy = spectrum.dblquad(Fy, stype)
         # self._tsigmaxy = self.spectrum.dblquad(Fxy, stype)
         # self._tsigma = self._tsigmaxx + self._tsigmayy
         # self._tvar = 0.0081/2 * integrate.quad(lambda x: S(x), KT[0], KT[1], epsabs=1e-6)[0]
         # moments = self._tvar, self._tsigmaxx, self._tsigmayy, self._tsigma, self._tsigma
-        moments = self._tsigmaxx, self._tsigmayy
-        # print(moments)
+        # moments = self._tsigma, self._tsigmaxx, self._tsigmayy
+        # moments = spectrum.dblquad(Q, stype)
+        moments = self._tsigmaxx, self._tsigmayy 
+        print(spectrum.peak, rc.surface.nonDimWindFetch, moments)
         return moments
     
     def angleCorrection(self, theta):
@@ -374,33 +354,33 @@ class Surface():
         sigma *= np.exp( - np.tan(theta)**2 * var[1]/(2*var[0]*var[1] - 2*var[2]**2))
         return sigma
 
-    @property
-    def nonDimWindFetch(self):
-        return self.spectrum.nonDimWindFetch
+    # @property
+    # def nonDimWindFetch(self):
+    #     return spectrum.nonDimWindFetch
 
-    @nonDimWindFetch.setter
-    def nonDimWindFetch(self, x):
-        self.spectrum.nonDimWindFetch = x
-        self.spectrum.peakUpdate(x=x)
-        self.k_m = self.spectrum.k_m
+    # @nonDimWindFetch.setter
+    # def nonDimWindFetch(self, x):
+    #     spectrum.nonDimWindFetch = x
+    #     spectrum.peakUpdate(x=x)
+    #     self.k_m = spectrum.k_m
 
 
-    @property
-    def windSpeed(self):
-        return self.spectrum.windSpeed
+    # @property
+    # def windSpeed(self):
+    #     return spectrum.windSpeed
 
-    @windSpeed.setter
-    def windSpeed(self, U):
-        self.spectrum.windSpeed = U
-        self.spectrum.peakUpdate()
-        self.k_m = self.spectrum.k_m
+    # @windSpeed.setter
+    # def windSpeed(self, U):
+    #     spectrum.windSpeed = U
+    #     spectrum.peakUpdate()
+    #     self.k_m = spectrum.k_m
 
 
 
     @property
     def meshgrid(self):
         r = np.array(self._r[0:2], dtype=float)
-        return r.reshape((2, self.gridSize, self.gridSize))
+        return r.reshape((2, rc.surface.gridSize, rc.surface.gridSize))
 
     @meshgrid.setter
     def meshgrid(self, rho: tuple):
@@ -466,7 +446,7 @@ class Surface():
         self._Psi = Psi
     
     def reshape(self, arr):
-        return np.array(arr, dtype=float).reshape((self.gridSize, self.gridSize))
+        return np.array(arr, dtype=float).reshape((rc.surface.gridSize, rc.surface.gridSize))
     
     def plot(self, x, y, surf, label = "default"):
 
@@ -481,11 +461,11 @@ class Surface():
         bar = fig.colorbar(mappable=mappable, ax=ax)
         bar.set_label("высота, м")
 
-        ax.set_title("$U_{10} = %.0f $ м/с" % (self.spectrum.U10) )
+        ax.set_title("$U_{10} = %.0f $ м/с" % (spectrum.U10) )
         ax.text(0.05,0.95,
             '\n'.join((
                     '$\\sigma^2_s=%.5f$' % (np.std(surf)**2/2),
-                    '$\\sigma^2_{0s}=%.5f$' % (self.spectrum.sigma_sqr),
+                    '$\\sigma^2_{0s}=%.5f$' % (spectrum.sigma_sqr),
                     '$\\langle z \\rangle = %.5f$' % (np.mean(surf)),
             )),
             verticalalignment='top',transform=ax.transAxes,)
@@ -500,11 +480,12 @@ class Surface():
         if not isinstance(k, np.ndarray):
             k = np.array([k])
 
+        km = spectrum.peak
         def b(k):
-            k[np.where(k/self.k_m < 0.4)] = self.k_m * 0.4
+            k[np.where(k/km < 0.4)] = km * 0.4
             b=(
-                -0.28+0.65*np.exp(-0.75*np.log(k/self.k_m))
-                +0.01*np.exp(-0.2+0.7*np.log10(k/self.k_m))
+                -0.28+0.65*np.exp(-0.75*np.log(k/km))
+                +0.01*np.exp(-0.2+0.7*np.log10(k/km))
             )
             return b
 
@@ -512,15 +493,21 @@ class Surface():
         return B
 
     def Phi(self,k,phi):
+
         # Функция углового распределения
-        phi = phi - self.direction[0]
 
+        if not isinstance(phi, np.ndarray):
+            phi = np.array([phi])
 
-        normalization = lambda B: B/np.arctan(np.sinh(2*pi*B))
+        phi -= self.direction
+        index = np.where(np.abs(phi) > np.pi)
+        phi[index] = np.sign(phi[index])*(2*np.pi - np.abs(phi[index]))
 
         B0 = self.B(k)
+        normalization = lambda B: B/np.arctan(np.sinh(2*pi*B))
 
         A0 = normalization(B0)
+
         phi = phi[np.newaxis]
         Phi = A0/np.cosh(2*B0*phi.T )
         return Phi.T
@@ -541,7 +528,7 @@ class Surface():
 
     def amplitude(self, k):
         N = k.size
-        S = self.spectrum.get_spectrum()
+        S = spectrum.get_spectrum()
         integral = np.zeros(k.size-1)
         for i in range(1,N):
             integral[i-1] += integrate.quad(S,k[i-1],k[i])[0]
@@ -550,8 +537,8 @@ class Surface():
 
     def export(self):
 
-        self.k = np.logspace(np.log10(self.spectrum.KT[0]), np.log10(self.spectrum.KT[-1]), self.N + 1)
-        self.k_m = self.spectrum.k_m
+        self.k = np.logspace(np.log10(spectrum.KT[0]), np.log10(spectrum.KT[-1]), self.N + 1)
+        self.k_m = spectrum.k_m
         self.A = self.amplitude(self.k)
         self.F = self.angle(self.k, self.phi)
 

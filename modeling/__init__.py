@@ -115,7 +115,5 @@ class Foo(object):
 
 rc = rcParams()
  
-from .surface import Surface
-from .spectrum import Spectrum
-surface = Surface()
-spectrum = Spectrum()
+from . import spectrum
+spectrum = spectrum.Spectrum()
