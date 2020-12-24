@@ -1,37 +1,28 @@
 from json import load
-import collections
+import logging
+import sys, os
 
-# Замена дефолтному property
-class dispatcher(object):
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-    def __init__(self, attr):
-        self.attr = attr
-        self.__call = []
-    
-    @property 
-    def call(self):
-        return self.__call
+fh = logging.FileHandler('modeling.log')
+fh.setFormatter(formatter)
+logger.addHandler(fh)
 
-    def __get__(self, obj, objtype):
-        return getattr(obj, self.attr)
+sh = logging.StreamHandler(sys.stdout)
+sh.setFormatter(formatter)
+logger.addHandler(sh)
 
-    def __set__(self, obj, value):
-        print(self)
-        print(obj)
-        for func in self.call:
-            if type(func).__name__ == "function":
-                func(value)
-
-        setattr(obj, self.attr, value )
+logger.info('Welcome to project repo: https://github.com/kannab98/modeling')
 
 class rcParams():
+    logger.info('Load config  from %s' % os.path.join(os.getcwd(), 'rc.json'))
     with open("rc.json") as f:
         __rc__ = load(f)
 
     def __init__(self, **kwargs):
         self.__json2object__("rc.json")
-        self.callbacks = {}
-        self.callbacks = {}
 
 
     def __json2object__(self, file):
@@ -62,7 +53,7 @@ class rcParams():
         for Key, Value in __rc__.items():
             setattr(self, Key, type('rc', (object,), {}))
             attr = getattr(self, Key)
-            setattr(attr, "call", {})
+            # setattr(attr, "call", {})
             for key, value in Value.items():
                 setattr(attr, key, value[0])
 
@@ -91,12 +82,12 @@ class rcParams():
 
 #     return property(lambda self: getting(getattr(self, name)),
 #                     lambda self, val: setattr(self, name, setting(val)))
-name = "wind"
-val = 10
-class Foo(object):                                   
+# name = "wind"
+# val = 10
+# class Foo(object):                                   
 
-    def __init__(self):               
-        self._wind = 15
+#     def __init__(self):               
+#         self._wind = 15
 
 
 
@@ -113,7 +104,14 @@ class Foo(object):
 
 # config  = kwargs["config"] if "config" in kwargs else os.path.join(os.path.abspath(os.getcwd()), "rc.json")
 
+
+
+
+
 rc = rcParams()
  
-from . import spectrum
-spectrum = spectrum.Spectrum()
+from modeling import Spectrum
+spectrum = Spectrum.spectrum()
+from modeling import Surface
+surface  = Surface.Surface(spectrum)
+
