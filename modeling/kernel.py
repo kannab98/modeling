@@ -35,23 +35,32 @@ def init(kernel, arr, X, Y, host_constants):
     X0 = X
     Y0 = Y
     if kernel.__dict__['py_func'].__name__ == "cwm":
-        print("Линеаризация сетки")
+
+        logger.debug("Irregular meshgrid. Initializing regularization")
         X0 = X0.flatten()
         Y0 = Y0.flatten()
         modeling.cuda.linearized_cwm_grid[blockspergrid, threadsperblock](X0, Y0, *cuda_constants)
 
-    # X0 = cuda.to_device(X0)
-    # Y0 = cuda.to_device(Y0)
+
+
+    if (X.flatten().all() == X0.all()):
+
+        logger.debug("Use regular meshgrid")
+        X0 = cuda.to_device(X0)
+        Y0 = cuda.to_device(Y0)
+
+    else:
+        logger.warning("Can't complete regularization. Use irregular meshgrid")
 
     kernel[blockspergrid, threadsperblock](arr, X0, Y0, *cuda_constants)
 
-    print("Сетка линейна: %s" % (X.flatten().all() == X0.all()))
+
 
 
     return arr, X, Y
 
 def simple_launch(kernel):
-    print(kernel.__dict__['py_func'].__name__)
+    logger.info("Use %s kernel" % kernel.__dict__['py_func'].__name__)
 
     model_coeffs = surface.export()
 
@@ -65,6 +74,25 @@ def simple_launch(kernel):
     Y0 = np.array([Y0])
 
     size = rc.surface.gridSize
+
+    var0 = spectrum.quad(0)
+    var0_s = spectrum.quad(2)
+
+    var = np.var(arr[0])
+    var_s = np.var(arr[1]+arr[2])
+
+    logger.info('Practice variance of heights sigma^2_h=%.6f' % var)
+    logger.info('Practice variance of heights sigma^2=%.6f' % var_s)
+
+    if 0.5*var0 <= var <= 1.5*var0:
+        logger.info("Practice variance of heights sigma^2_h matches with theory")
+    else:
+        logger.warning("Practice variance of heights sigma^2_h not matches with theory")
+
+    if 0.5*var0_s <= var_s <= 1.5*var0_s:
+        logger.info("Practice variance of full slopes sigma^2 matches with theory")
+    else:
+        logger.warning("Practice variance of full slopes sigma^2 not matches with theory")
 
     return arr.reshape(3, *size)
 

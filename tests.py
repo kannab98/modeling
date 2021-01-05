@@ -1,5 +1,5 @@
-from modeling.surface import Surface
-from modeling.surface import kernel_cwm as kernel
+from modeling import surface
+from modeling.kernels import kernel_cwm as kernel
 from modeling.surface import run_kernels
 from modeling.retracking import Brown
 
@@ -66,7 +66,7 @@ class TestSurface(unittest.TestCase, Surface):
         sigma = surface.crossSection(theta, moments)
         
 
-# @unittest.p
+@unittest.skip
 class TestSpectrum(unittest.TestCase, Surface):
 
     def test_init(self):
@@ -241,9 +241,16 @@ class TestMoments(unittest.TestCase, Surface):
                 df.loc[:,("model", b, m) ] = sigma[:,i,j]
         
         print(df)
-        # with open("data/ModelMoments.xlsx", "wb") as f:
-            # df = df.to_excel(f)
+        with open("data/ModelMoments.xlsx", "wb") as f:
+            df = df.to_excel(f)
 
+
+
+@unittest.skip
+class TestTools(unittest.TestCase):
+
+    def __init__(self, *args, **kwargs):
+        pass
 
 
 

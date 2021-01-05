@@ -1,0 +1,60 @@
+{
+    "swell": {
+        "enable": false,
+        "direction": 120,
+        "speed": 15
+    },
+    "wind": {
+        "enable": true,
+        "direction": 30,
+        "speed": 12
+    },
+    "constants": {
+        "lightSpeed": 299792458,
+        "earthRadius": 6370000.0,
+        "gravityAcceleration": 9.81
+    },
+    "surface": {
+        "band": "C",
+        "x": 2500,
+        "y": 2500,
+        "gridSize": 16,
+        "randomPhases": true,
+        "kernel": "default",
+        "cache": true,
+        "useCache": true,
+        "kSize": 512,
+        "kEdge": [
+            0.01187461328125,
+            15.147650049247986
+        ],
+        "phiSize": 64,
+        "nonDimWindFetch": 20170,
+        "mean": null,
+        "varTheory": null,
+        "varPreCalc": 0.7036622047378491,
+        "varReal": 0.6999863985508512,
+        "covTheory": null,
+        "covPreCalc": null,
+        "covReal": [
+            [
+                0.01374862652070813,
+                0.0026650989057377724
+            ],
+            [
+                0.0026650989057377724,
+                0.011016606561082429
+            ]
+        ]
+    },
+    "antenna": {
+        "gainWidth": 1.5,
+        "z": 407000.0,
+        "x": 0,
+        "y": 0,
+        "deviation": 0,
+        "polarAngle": 0,
+        "impulseDuration": 3e-09,
+        "band": "Ku"
+    }
+}

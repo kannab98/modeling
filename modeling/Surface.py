@@ -14,17 +14,48 @@ import os
 CACHE_FOLDER = "__pycache__"
 
 class Surface():
-    @staticmethod
-    def abs(vec):
-        vec = np.array(vec, dtype=float)
-        return np.diag(vec.T@vec)
 
-    @staticmethod
-    def position(r, r0):
-        r0 = r0[np.newaxis]
-        return np.array(r + (np.ones((r.shape[1], 1)) @ r0).T)
+    def dispatcher(func):
+        """
+        Декоратор обновляет необходимые переменные при изменении
+        разгона или скорости ветра
+        """
+        def wrapper(*args):
+            self = args[0]
+            x = rc.surface.x
+            y = rc.surface.y
+            gridSize = rc.surface.gridSize
+            N = rc.surface.kSize
+            M = rc.surface.phiSize
 
-    def __init__(self, spectrum, **kwargs):
+            if self._x.min() != x[0] or \
+               self._x.max() != x[1] or \
+               self._y.min() != y[0] or \
+               self._y.max() != y[1] or \
+               self._x.shape != gridSize:
+                self.gridUpdate()
+            
+            if self.N != N or self.M != M:
+                self.N, self.M = N, M
+                self.amplUpdate()
+
+
+            return func(*args)
+
+        return wrapper
+    def amplUpdate(self):
+        self.k = np.logspace(np.log10(spectrum.KT[0]), np.log10(spectrum.KT[-1]), self.N + 1)
+
+        self.phi = np.linspace(-np.pi, np.pi,self.M + 1, endpoint=True)
+
+
+        if rc.surface.randomPhases:
+            self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
+        else:
+            self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
+
+    def gridUpdate(self):
+
         self._x = np.linspace(*rc.surface.x, rc.surface.gridSize[0])
         self._y = np.linspace(*rc.surface.y, rc.surface.gridSize[1])
         self._x, self._y = np.meshgrid(self._x, self._y)
@@ -51,6 +82,21 @@ class Surface():
             np.frombuffer(self._zz),
         ], dtype="object")
 
+    @staticmethod
+    def abs(vec):
+        vec = np.array(vec, dtype=float)
+        return np.diag(vec.T@vec)
+
+    @staticmethod
+    def position(r, r0):
+        r0 = r0[np.newaxis]
+        return np.array(r + (np.ones((r.shape[1], 1)) @ r0).T)
+
+    def __init__(self, spectrum, **kwargs):
+
+
+        self.gridUpdate()
+
         self._R = None
 
         self._A = None
@@ -59,9 +105,10 @@ class Surface():
 
         self.N = rc.surface.kSize
         self.M = rc.surface.phiSize
+        self.amplUpdate()
         # k_edge = spectrum.kEdge
 
-        self.k = np.logspace(np.log10(spectrum.KT[0]), np.log10(spectrum.KT[-1]), self.N + 1)
+
 
 
 
@@ -87,13 +134,7 @@ class Surface():
         #     self.k = np.linspace(self.k_m/4, self.k_edge['Ku'], self.N + 1)
 
         # self.k = np.logspace(np.log10(spectrum.KT[0]), np.log10(spectrum.KT[-1]), self.N + 1)
-        self.phi = np.linspace(-np.pi, np.pi,self.M + 1, endpoint=True)
 
-
-        if rc.surface.randomPhases:
-            self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
-        else:
-            self.psi = np.random.uniform(0, 2*pi, size=(self.N, self.M))
 
         # if random_phases == 0:
         #     self.psi = np.array([
@@ -209,10 +250,13 @@ class Surface():
 
 
 
+
     @property
+    @dispatcher
     def meshgrid(self):
         r = np.array(self._r[0:2], dtype=float)
-        return r.reshape((2, *rc.surface.gridSize))
+        return r.reshape(2, *rc.surface.gridSize)
+
 
     @meshgrid.setter
     def meshgrid(self, rho: tuple):
@@ -386,7 +430,11 @@ class Surface():
         for i in range(N):
             A = integrate.quad(S,k[i], k[i+1])[0]
             for j in range(M):
-                F = np.trapz( Phi( phi[j:j+2], k[i:i+1] ), phi[j:j+2])
+                if self.M > 2:
+                    F = np.trapz( Phi( phi[j:j+2], k[i:i+1] ), phi[j:j+2])
+                else:
+                    F = 1
+
                 integral[i][j] =  A * F
 
         amplitude = np.sqrt(2*integral)
@@ -415,15 +463,17 @@ class Surface():
 
     #     return self.k, self.phi, self.A, self.F, self.psi
 
+    @dispatcher
     def export(self):
         # spectrum.peakUpdate()
-        self.k = np.logspace(np.log10(spectrum.KT[0]), np.log10(spectrum.KT[-1]), self.N + 1)
+        # self.k = np.logspace(np.log10(spectrum.KT[0]), np.log10(spectrum.KT[-1]), self.N + 1)
 
         srf = rc.surface
-        Aname = "A_%s_%s_%s_%s_%s.npy" % (srf.band, srf.kSize, srf.phiSize, rc.wind.speed, rc.wind.direction)
-        Apath = os.path.join( CACHE_FOLDER, Aname)
+        # Aname = "A_%s_%s_%s_%s_%s.npy" % (srf.band, srf.kSize, srf.phiSize, rc.wind.speed, rc.wind.direction)
+        # Apath = os.path.join( CACHE_FOLDER, Aname)
 
         k = self.k[None].T * np.exp(1j*self.phi[None])
+        k = np.array(k[:-1, :-1])
         A0 = self.ampld(self.k, self.phi)
 
         return k, A0*np.exp(1j*self.psi)

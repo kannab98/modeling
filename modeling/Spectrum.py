@@ -139,6 +139,7 @@ class spectrum():
     def peakUpdate(self):
         x = rc.surface.nonDimWindFetch
         U = rc.wind.speed
+        logger.info('Start modeling with U=%.1f, Udir=%.1f, x=%.1f,' % (U, rc.wind.direction, x))
 
         # коэффициент gamma (см. спектр JONSWAP)
         self._gamma = self.Gamma(x)
@@ -188,7 +189,7 @@ class spectrum():
         # интерполируем смоделированный спектр
         if stype == "ryabkova":
             spectrum = self.interpolate(self.ryabkova)
-            spectrum = self.interpolate(self.ryabkova)
+            # spectrum = self.interpolate(self.ryabkova)
         elif stype == 'slick':
             f = lambda k: self.ryabkova(k)*self.with_slick(k)
             spectrum = self.interpolate(f)
@@ -323,13 +324,14 @@ class spectrum():
     
     @dispatcher
     def quad(self, p):
-        S = lambda k, i: self.piecewise_spectrum(i,k) * k**p
+        # S = lambda k, i: self.piecewise_spectrum(i,k) * k**p
         limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
-        var = 0
+        # var = 0
 
-        for i in range(1, limit.size):
-            var += integrate.quad(S, limit[i-1], limit[i], args=(i-1))[0]
-
+        # for i in range(1, limit.size):
+        #     var += integrate.quad(S, limit[i-1], limit[i], args=(i-1))[0]
+        S = lambda k: self.spectrum(k) * k**p
+        var = integrate.quad(S, limit[0], limit[-1],)[0]
         return var
 
 
@@ -377,6 +379,32 @@ class spectrum():
         cov[0, 1] = cov[1, 0]
 
         return cov
+
+    def correlate(self, rho):
+
+
+        S = lambda k, rho: self.get_spectrum()(k) *  np.cos(k*rho)
+        limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
+        k0 = np.logspace( np.log10(self.KT[0]), np.log10(self.KT[-1]), 10**3)
+        k0[0] = self.KT[0]
+        k0[-1] = self.KT[-1]
+
+        integral=np.zeros(len(rho))
+        for i in range(len(rho)):
+            # integral[i] = integrate.quad(S, limit[0], limit[-1],args=(rho[i],))[0]
+            integral[i] = np.trapz(S(k0, rho[i]), k0)
+
+        return integral
+
+    def fftcorrelate(self):
+
+
+        k0 = np.linspace( self.KT[0], self.KT[-1], int(1e4))
+        S = self.get_spectrum()(k0)
+        K = np.fft.ifft(S)
+        ind = int(np.ceil(S.size/2))
+        K = K[:ind] * (k0.max() - k0.min())
+        return K
 
     def spectrum(self, k):
         limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
@@ -507,6 +535,8 @@ class spectrum():
     def interpolate(self, spectrum):
         # k0 -- густая сетка, нужна для интегрирования и интерполирования
         k0 = np.logspace( np.log10(self.KT[0]), np.log10(self.KT[-1]), 10**5)
+        k0[0] = self.KT[0]
+        k0[-1] = self.KT[-1]
         spectrum = interpolate.interp1d(k0, spectrum(k0))
         return spectrum
 
