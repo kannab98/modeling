@@ -3,72 +3,72 @@ from modeling import rc, kernel, cuda, surface, spectrum
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.fft import fft, ifft, fftfreq, fftshift, rfft, irfft
+import scipy.fft as fft
 from scipy import signal
 
-# rc.surface.x = [0, *np.pi/spectrum.KT[0]]
-factor1 = 8
-factor2 = 1
-
-rc.surface.x = [0, factor1 * np.pi/spectrum.KT[0]]
-rc.surface.y = [0, 100]
-
-step = np.pi/spectrum.KT[-1]/factor2
-count = int(np.ceil(np.max(rc.surface.x)/step))
-
-rc.surface.gridSize = [count, 1]
-rc.surface.phiSize = 1
-rc.surface.kSize = 1024
-
-srf = kernel.simple_launch(cuda.default)
-
-ind = int(np.ceil(srf[0].size/2))
-K = np.zeros(ind)
-
-for i in range(0, ind):
-    Z = fft(srf[0][i:i+ind].flatten())
-    sigma = spectrum.quad(0)
-    K += np.real(ifft(np.abs(Z)**2))/Z.size
-    # S += fft(K)
-
-
-K *= 1/ind
-
-x = surface.gridx.flatten()
-# if K.size % 2 == 0:
-    # S = S[:ind] + np.flip(S[ind:])
-    # K = K[:ind]
-    # k = np.linspace(spectrum.KT[0], spectrum.KT[-1], ind)
-    # x = x[:ind]
-# else:
-    # K = K[:ind-1]
-    # S = S[:ind-1] + np.flip(S[ind:])
-    # k = np.linspace(spectrum.KT[0], spectrum.KT[-1], ind-1)
-    # x = x[:ind-1]
-# print(k[0], x[0])
-# x0 = np.linspace(x.min(), x.max(), 400) 
-# K0 = spectrum.correlate(x0)
-# K1 = spectrum.fftcorrelate()
-# x1 = np.linspace(x.min(), x.max(), K1.size) 
-# print(K1.size)
-# print(K1.max())
+xmax = 100
+rho = np.linspace(0, 500, 400)
+K1 = spectrum.fftcorrelate(xmax, 0, 0)
+x1 = spectrum.fftfreq(xmax)
 
 plt.figure()
-plt.plot(K)
-# plt.plot(x0, K0)
+# plt.plot(K0)
+F = lambda k, phi: spectrum.azimuthal_distribution(k, phi)
+S = lambda k: spectrum.ryabkova(k)
+
+def Spectrum2D(k, phi):
+    return S(k)[np.newaxis].T * (F(k,phi))/k/np.cos(phi)*np.sin(phi)
+
+
+step = spectrum.fftstep(xmax)
+
+k = np.arange(-spectrum.KT[-1], spectrum.KT[-1], step)
+phi = np.linspace(-np.pi, np.pi, k.size)
+kx = k*np.cos(phi)
+ky = k*np.sin(phi)
+# ky = np.arange(-spectrum.KT[-1], spectrum.KT[-1], step)
+
+# K = fft.ifft2(S2d(k,phi))*(2*np.pi)*spectrum.KT[-1]
+S = Spectrum2D(k, phi)
+K = fft.ifft2(S)
+
+K = fft.fftshift(K)*kx.max()*ky.max()
+
+
+
+# K, Phi = np.meshgrid(k, phi)
+
+# fig, ax = plt.subplots(subplot_kw=dict(projection='polar'))
+fig, ax = plt.subplots()
+# # ax.set_rscale("log")
+# # mappable = ax.contourf(phi, np.log10(k), np.log10(K), levels=100)
+# mappable = ax.contourf(phi, np.log10(k), K.T, levels=100)
+x = spectrum.fftfreq(xmax)
+# # X, Y = np.meshgrid(x,x)
+K = np.abs(K)/np.max(np.abs(K))
+# print(K)
+mappable = ax.contourf(x[:,0],x[:,0],K)
+fig.colorbar(mappable=mappable)
+# # print(k)
+
+# fig, ax = plt.subplots()
+# # # ax.loglog(k, spectrum.ryabkova(k))
+
+# # # ax.plot(k, S[:, 0])
+# # # for i in range(phi.size):
+# # #     ax.loglog(k, S[:, i])
+
+# # # ax.plot(x, K[:, 0])
+
+# ind = [K.shape[0]//2]
+# for i in ind:
+#     K0 = K[:, i]
+#     K0 = K0/K0.max()
+#     K0 = np.abs(K0)
+#     ax.plot(x, K0)
+
+# K1 = K1/K1.max()
+# K1 = np.abs(K1)
+# ax.plot(x1, K1)
+
 plt.savefig("kek1")
-# plt.figure()
-
-# plt.loglog(k, np.abs(S))
-# plt.savefig("kek2")
-
-
-# X = np.real(rfft(srf[0])).flatten()
-# x = irfft(X)
-# K = irfft(np.conj(X)*X)
-
-# plt.figure()
-# plt.plot(srf[0])
-# plt.plot(x)
-
-# plt.figure()
-# plt.plot(K)

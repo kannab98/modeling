@@ -108,10 +108,15 @@ class rcParams():
 
 
 
+
 rc = rcParams()
  
-from modeling import Spectrum
-spectrum = Spectrum.spectrum()
-from modeling import Surface
-surface  = Surface.Surface(spectrum)
+# from modeling import Spectrum
+# spectrum = Spectrum.spectrum()
+
+
+# from modeling import Retracking
+# retracking = Retracking.retracking()
+# brown = Retracking.brown()
+
 

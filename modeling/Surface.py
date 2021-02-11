@@ -35,7 +35,7 @@ class Surface():
                self._x.shape != gridSize:
                 self.gridUpdate()
             
-            if self.N != N or self.M != M:
+            if self.N != N or self.M != M or rc.surface.randomPhases:
                 self.N, self.M = N, M
                 self.amplUpdate()
 
@@ -164,7 +164,7 @@ class Surface():
         self._tsigmaxy = None
 
 
-    def _staticMoments(self, x0, y0, surface):
+    def staticMoments(self, x0, y0, surface):
 
         corr = np.cov(surface[1], surface[2])
         moments = (np.mean(surface[0]), np.var(surface[0]), corr[0][0], corr[1][1], corr[0][0]+corr[1][1])
@@ -211,7 +211,7 @@ class Surface():
 
     @staticmethod
     def cross_section(theta, cov): 
-        theta = Surface.angle_correction(theta)
+        # theta = Surface.angle_correction(theta)
         theta = theta[np.newaxis]
         # Коэффициент Френеля
         F = 0.8
@@ -309,9 +309,9 @@ class Surface():
     def phases(self):
         return self._Psi
 
-    @angleDistribution.setter
-    def angleDistribution(self, F):
-        self._F = F
+    # @angleDisribution.setter
+    # def angleDistribution(self, F):
+    #     self._F = F
 
     @amplitudes.setter
     def amplitudes(self, A):
@@ -465,8 +465,8 @@ class Surface():
 
     @dispatcher
     def export(self):
-        # spectrum.peakUpdate()
-        # self.k = np.logspace(np.log10(spectrum.KT[0]), np.log10(spectrum.KT[-1]), self.N + 1)
+        spectrum.peakUpdate()
+        self.k = np.logspace(np.log10(spectrum.KT[0]), np.log10(spectrum.KT[-1]), self.N + 1)
 
         srf = rc.surface
         # Aname = "A_%s_%s_%s_%s_%s.npy" % (srf.band, srf.kSize, srf.phiSize, rc.wind.speed, rc.wind.direction)

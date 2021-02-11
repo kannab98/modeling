@@ -1,10 +1,12 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import logging
-from scipy import interpolate, integrate, optimize
+
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy import fft, integrate, interpolate, optimize
+from scipy.special import erf
 
 from . import rc
-
+from tqdm import tqdm
 
 g = rc.constants.gravityAcceleration
 logger = logging.getLogger(__name__)
@@ -26,6 +28,7 @@ class dispersion:
         Решение прямой задачи поиска частоты по известному волновому числу 
         из дисперсионного соотношения
         """
+        k = np.abs(k)
         return np.sqrt( dispersion.f(k) )
         
     @staticmethod
@@ -67,19 +70,22 @@ class spectrum():
         self.peakUpdate()
 
 
+
+
     @staticmethod
     def kEdges(k_m, band):
 
         """
         Границы различных электромагнитных диапазонов согласно спецификации IEEE
         
-        Band        Freq, GHz            WaveLength, cm
-        Ka          26-40                0.75 - 1.13 
-        Ku          12-18                1.6  - 2.5 
-        X           8-12                 2.5  - 3.75
-        C           4-8                  3.75 - 7.5
+        Band        Freq, GHz            WaveLength, cm         BoundaryWaveNumber, 
+        Ka          26-40                0.75 - 1.13            2000 
+        Ku          12-18                1.6  - 2.5             80 
+        X           8-12                 2.5  - 3.75            40
+        C           4-8                  3.75 - 7.5             10
 
         """
+        eps = lambda k_m: 2.6376 * k_m**2 - 0.9241*k_m + 0.3437
         bands = {"C":1, "X":2, "Ku":3, "Ka":4}
 
         bands_edges = [
@@ -122,7 +128,7 @@ class spectrum():
         Декоратор обновляет необходимые переменные при изменении
         разгона или скорости ветра
         """
-        def wrapper(*args):
+        def wrapper(*args, **kwargs):
             self = args[0]
             x = rc.surface.nonDimWindFetch
             U = rc.wind.speed
@@ -133,7 +139,8 @@ class spectrum():
 
             self.__x, self.__U = x, U
 
-            return func(*args)
+
+            return func(*args, **kwargs)
         return wrapper
 
     def peakUpdate(self):
@@ -172,8 +179,7 @@ class spectrum():
         __limit_k = np.array([dispersion.k(limit[i]) for i in range(limit.size)])
         self.limit_k = __limit_k[np.where(__limit_k <= self.KT.max())]
         del __limit_k, limit
-        logger.debug('Variance of heights sigma^2_h=%.6f' % self.quad(0))
-        logger.debug('Full variance of slopes sigma^2=%.6f' % self.quad(2))
+
 
 
     def plot(self, stype="ryabkova"):
@@ -187,6 +193,9 @@ class spectrum():
     def get_spectrum(self, stype="ryabkova"):
         # self.peakUpdate()
         # интерполируем смоделированный спектр
+
+        logger.debug('Variance of heights sigma^2_h=%.6f' % self.quad(0, 0))
+        logger.debug('Full variance of slopes sigma^2=%.6f' % self.quad(2, 0))
         if stype == "ryabkova":
             spectrum = self.interpolate(self.ryabkova)
             # spectrum = self.interpolate(self.ryabkova)
@@ -243,8 +252,10 @@ class spectrum():
         if not isinstance(k, np.ndarray):
             k = np.array([k])
 
+        k = np.abs(k)
         sigma = 0.09 * np.ones(k.size, dtype=np.float64)
         sigma[ np.where(k < self.k_m) ] = 0.07
+
         Sw = (self._alpha/2 *
               k**(-3) * np.exp(-1.25 * (self.k_m/k)**2) *
               np.power(self._gamma,
@@ -252,8 +263,6 @@ class spectrum():
                        )
               )
 
-
-        # Sw =  k**(-3)* np.exp( -1.25 * (self.k_m/k)**2 ) 
         return  Sw 
 
     # Безразмерный коэффициент Gamma
@@ -323,20 +332,25 @@ class spectrum():
             return beta0/omega0**power[n-1]*dispersion.det(k)
     
     @dispatcher
-    def quad(self, p):
+    def quad(self, a,b, k0=None, k1=None, **quadkwargs):
         # S = lambda k, i: self.piecewise_spectrum(i,k) * k**p
-        limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
+        # limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
+        if k0==None:
+            k0 = self.KT[0]
+
+        if k1==None:
+            k1 = self.KT[-1]
         # var = 0
 
         # for i in range(1, limit.size):
         #     var += integrate.quad(S, limit[i-1], limit[i], args=(i-1))[0]
-        S = lambda k: self.spectrum(k) * k**p
-        var = integrate.quad(S, limit[0], limit[-1],)[0]
+        S = lambda k: self.spectrum(k) * k**a * dispersion.omega(k)**b
+        var = integrate.quad(S, k0, k1, **quadkwargs)[0]
         return var
 
 
     @dispatcher
-    def dblquad(self, a, b, c, k0=None, k1=None, phi0=None, phi1=None):
+    def dblquad(self, a, b, c, k0=None, k1=None, phi0=None, phi1=None, **quadkwargs):
         limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
         # S = lambda phi, k, i:  self.spectrum0(i,k) *  self.azimuthal_distribution(k, phi) *  k**(a+b-c) *np.cos(phi)**a * np.sin(phi)**b
 
@@ -354,11 +368,11 @@ class spectrum():
         
         # print(k0, k1, phi0, phi1)
 
-        S = lambda phi, k:  self.spectrum(k) * self.azimuthal_distribution(k, phi) *  k**(a+b-c) *np.cos(phi)**a * np.sin(phi)**b
+        S = lambda phi, k:  self.spectrum(k) * self.azimuthal_distribution(k, phi) *  k**(a+b-c) * np.cos(phi)**a * np.sin(phi)**b
         var = integrate.dblquad( S,
                 a=k0, b=k1,
                 gfun=lambda phi: phi0, 
-                hfun=lambda phi: phi1, epsabs=1.49e-08, epsrel=1.49e-08)
+                hfun=lambda phi: phi1, **quadkwargs)
         
         # for i in range(1, limit.size):
         #     var += integrate.dblquad(
@@ -383,34 +397,126 @@ class spectrum():
     def correlate(self, rho):
 
 
+    # def quad(self, a,b, k0=None, k1=None):
         S = lambda k, rho: self.get_spectrum()(k) *  np.cos(k*rho)
         limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
-        k0 = np.logspace( np.log10(self.KT[0]), np.log10(self.KT[-1]), 10**3)
+        # k0 = np.logspace( np.log10(self.KT[0]), np.log10(self.KT[-1]), 2**10 + 1)
+        k0 = np.linspace( self.KT[0], self.KT[-1], 2**11 + 1)
         k0[0] = self.KT[0]
         k0[-1] = self.KT[-1]
 
         integral=np.zeros(len(rho))
         for i in range(len(rho)):
             # integral[i] = integrate.quad(S, limit[0], limit[-1],args=(rho[i],))[0]
-            integral[i] = np.trapz(S(k0, rho[i]), k0)
+            # integral[i] = integrate.romb(S(k0, rho[i]), np.diff(k0[:2]))
+            integral[i] =integrate.trapz(S(k0, rho[i]), k0)
 
         return integral
 
-    def fftcorrelate(self):
+    def fftstep(self, x):
+        return np.pi/x
 
 
-        k0 = np.linspace( self.KT[0], self.KT[-1], int(1e4))
-        S = self.get_spectrum()(k0)
-        K = np.fft.ifft(S)
+    def fftfreq(self, xmax):
+        step = self.fftstep(xmax)
+        k = np.arange(-self.KT[-1], self.KT[-1], step)
+        d = np.diff(k[0:2])
+        return np.linspace(-np.pi/d, +np.pi/d, k.size)
+
+    def fftcorrelate(self, xmax, a=0, b=0, c=1):
+
+        xkorr = 2*np.pi/self.KT[0]
+
+        x = xmax
+        # if xmax <= xkorr:
+        #     x = 2*xkorr
+
+        step = self.fftstep(x)
+        k = np.arange(-self.KT[-1], self.KT[-1], step)
+        D = k.max()
+
+        S = lambda k: k**a * dispersion.omega(k)**b * self.ryabkova(k)**c
+
+        S = fft.fftshift(S(k))
+        K = fft.ifft(S) * D
+
         ind = int(np.ceil(S.size/2))
-        K = K[:ind] * (k0.max() - k0.min())
+        # K = K[:ind]
+        K = fft.fftshift(K)
         return K
 
+    def spectrum_cwm(self, xmax):
+        sigma = np.zeros(2)
+        sigma[0] = self.quad(0,0)
+        sigma[1] = self.quad(1,0)
+
+        step = self.fftstep(xmax)
+        k = np.arange(-self.KT[-1], self.KT[-1], step)
+        f = self.fftcorrelate(xmax)
+        S = np.zeros((2, k.size), dtype=np.complex64)
+        S[0,:] = 2*(sigma[0] - f)
+        S[1,:] = 2*(sigma[1] - self.fftcorrelate(xmax, a=1))
+
+        dC = np.zeros((2, k.size), dtype=np.complex64)
+        dC[0] = 1j*k*f
+        dC[1] = -(k)**2*f
+
+        spec = fft.fft(
+            + np.exp( -(k*sigma[0])**2 ) 
+                * (sigma[0] - sigma[1]**2)  
+            - np.exp(-k**2/2*S[0]) 
+                * (   
+                    + 1/2 * S[0] * (1 - 2j*k*dC[0] - dC[1] - (k*dC[0])**2)
+                    - 1/4 * S[1]**2
+                  )
+
+        )
+        return fft.fftshift(spec)
+
+    def pdf_heights(self, z, dtype="default"):
+        sigma0 = self.quad(0,0)
+        if dtype == 'default':
+            return 1/np.sqrt(2*np.pi*sigma0) * np.exp(-1/2*z**2/sigma0)
+
+        if dtype == 'cwm':
+            sigma0 = self.quad(0,0)
+            sigma1 = self.quad(1,0)
+            return self.pdf_heights(z, 'default') * (1 - sigma1/sigma0*z)
+
+    def pdf_slopes(self, z, dtype="default"):
+
+        # sigma = self.quad(2,0)
+        sigma = 0.0
+        if dtype == 'default':
+            return 1/np.sqrt(2*np.pi*sigma) * np.exp(-1/2*z**2/sigma)
+
+        if dtype == 'cwm':
+            return (
+                + np.exp(-1/(2*sigma))/(np.pi*(1+z**2)**2)
+                + 1/np.sqrt(2*np.pi*sigma)
+                * (sigma*(1+z**2)+1)/(1+z**2)**(5/2)
+                * erf(1/np.sqrt(2*sigma*(1+z**2)))
+                * np.exp(-1/(2*sigma)*(z**2/(1+z**2)))
+            )
+
+
+
+
+
     def spectrum(self, k):
+
+
+        k = np.abs(k)
+        if k == 0:
+               return 0
+
         limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
         for j in range(1, limit.size):
             if k <= limit[j]:
                return self.piecewise_spectrum(j-1, k)
+
+        # if k > limit[-1]:
+            #    return self.piecewise_spectrum(3, k)
 
     def ryabkova(self, k):
 
@@ -418,6 +524,7 @@ class spectrum():
             k = np.array([k])
         
 
+        k = np.abs(k)
         limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
         ind = np.zeros((limit.size), dtype=int)
 
@@ -525,7 +632,6 @@ class spectrum():
         sigma = rc.slick.sigma
 
         return self.kontrast(k/100, beta0, sigma_w, sigma_m, sigma)
-
 
 
 

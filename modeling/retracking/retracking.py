@@ -8,13 +8,11 @@ from numpy import pi
 from scipy.optimize import curve_fit
 from scipy.special import erf
 from pandas import read_csv
-from modeling import rc
-from modeling.spectrum import Spectrum
-from modeling.surface import Surface
+from modeling import rc #, spectrum, surface
 import numpy
 
 
-class Retracking():
+class __retracking__():
     """
     Самый простой способ использовать этот класс, после вызова его конструктора
     это использовать метод класса from_file. 
@@ -34,7 +32,6 @@ class Retracking():
     # Импорт модуля
     >>> from modeling import rc
     >>> from modeling.retracking import Retracking 
-    # Конструктор класса
     >>> retracking = Retracking()
     # Ретрекинг для всех файлов, заканчивающихся на .txt в директории impulses
     >>> df0, df = retracking.from_file(path.join("impulses", ".*.txt"))
@@ -98,7 +95,6 @@ class Retracking():
         with pd.ExcelWriter(excel_name, mode='a') as writer:  
             df0.to_excel(writer, sheet_name='raw')
 
-
         return df0, df
         
 
@@ -157,7 +153,6 @@ class Retracking():
                             p0=[A0, (t.max() + t.min())/2, (t[-1]-t[0])/t.size, 0])[0]
 
                             
-
         return popt
 
 
@@ -172,7 +167,7 @@ class Retracking():
         """
         return A * np.exp( -alpha * (t-tau) ) * (1 + erf( (t-tau)/sigma_l ) ) + T
 
-    def pulse(self, t, pulse):
+    def pulse(self, t, pulse, func=None):
         alpha = self.leading_edge(t, pulse, dtype="needed")
         A, tau, sigma_l, b = self.trailing_edge(t, pulse)
 
@@ -180,11 +175,19 @@ class Retracking():
                             xdata=t,
                             ydata=pulse,
                             p0=[A, alpha, tau, sigma_l, b],
-                            bounds = [0, np.inf]
+                            # bounds = [0, np.inf]
                         )[0]
         return popt 
+
+    # def karaev(self, t, pulse):
+    #     h = rc.antenna.z
+    #     A = lambda var: 1/(2*var*h**2) + 5.52/(rc.antenna.beamWidth)
+    #     F1 = 
+
+
     
     def swh(self, sigma_l):
+
         """
         Вычисление высоты значительного волнения
         """
@@ -205,7 +208,7 @@ class Retracking():
 
         # Скорость света/звука [м/с]
         c = rc.constants.lightSpeed
-        return tau*self.c/2
+        return tau*c/2
 
     def emb(self, swh, U10, dtype = "Rostov"):
         """
@@ -234,103 +237,4 @@ class Retracking():
         
         return None
     
-
-class Brown():
-
-    def __init__(self):
-
-        theta = np.deg2rad(rc.antenna.gainWidth)
-        self.Gamma = self.gamma(theta)
-
-    def t(self):
-        T = rc.antenna.impulseDuration
-        return np.linspace(-10*T, 25*T, 1000)
-
-    @staticmethod
-    def H(h):
-        R = rc.constants.earthRadius
-        return h * ( 1 + h/R )
-    
-    @staticmethod
-    def A(gamma, A0=1.):
-        xi = np.deg2rad(rc.antenna.deviation)
-        return A0*np.exp(-4/gamma * np.sin(xi)**2 )
-
-    @staticmethod
-    def u(t, alpha, sigma_c, cwm_mean = 0, cwm_var = 0):
-        c = rc.constants.lightSpeed
-        return (t - alpha * sigma_c**2 - cwm_mean/c) / (np.sqrt(2) * sigma_c)
-
-    @staticmethod
-    def v(t, alpha, sigma_c, cwm_mean = 0, cwm_var = 0):
-        c = rc.constants.lightSpeed
-        return alpha * (t - alpha/2 * sigma_c**2 - cwm_mean/c)
-
-    @staticmethod
-    def alpha(beta,delta):
-        return delta - beta**2/4
-
-    def delta(self, gamma):
-        c = rc.constants.lightSpeed
-        xi = np.deg2rad(rc.antenna.deviation)
-        h = rc.antenna.z
-        return 4/gamma * c/self.H(h) * np.cos(2 * xi)
-    
-    @staticmethod
-    def gamma(theta):
-        return 2*np.sin(theta/2)**2/np.log(2)
-
-    def beta(self, gamma):
-        c = rc.constants.lightSpeed
-        xi = np.deg2rad(rc.antenna.deviation)
-        h = rc.antenna.z
-        return 4/gamma * np.sqrt( c/self.H(h) ) * np.sin( 2*xi )
-
-    @staticmethod
-    def sigma_c(sigma_s):
-        T = rc.antenna.impulseDuration
-        c = rc.constants.lightSpeed
-        sigma_p = 0.425 * T 
-        return np.sqrt(sigma_p**2 + (2*sigma_s/c)**2 )
-
-    def pulse(self, t, dim = 1, cwm=False):
-
-        self.dim = dim
-        gamma = self.Gamma
-        delta = self.delta(gamma)
-        beta  = self.beta(gamma)
-
-        if dim == 1:
-            alpha = self.alpha(beta, delta)
-        else:
-            alpha = self.alpha(beta/np.sqrt(2), delta)
-
-
-        spec = Spectrum() 
-        surf = Surface()
-        sigma_s = spec.quad(0)
-        sigma_c = self.sigma_c(sigma_s)
-
-        cwm_mean = 0
-
-        if cwm == True:
-
-            cwm_mean = spec.quad(1)
-            sigma_s = spec.quad(0) - cwm_mean
-            sigma_c = self.sigma_c(sigma_s)
-
-
-        u = self.u(t, alpha, sigma_c, cwm_mean=cwm_mean)
-        v = self.v(t, alpha, sigma_c, cwm_mean=cwm_mean)
-
-        A = self.A(gamma)
-        pulse = A * np.exp(-v) * ( 1 + erf(u) )
-
-        if self.dim == 2:
-            alpha = gamma
-            u = self.u(t, alpha, sigma_c)
-            v = self.v(t, alpha, sigma_c)
-            pulse -= A/2 * np.exp(-v) * ( 1 + erf(u) )
-
-        return pulse
 

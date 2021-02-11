@@ -1,31 +1,69 @@
 import numpy as np
-from .surface import Surface
-from .surface import kernel_default as kernel_default
+from . import surface
 
 from . import rc
 import matplotlib.pyplot as plt
 
 
-class Experiment():
+class experiment():
 
-    def __init__(self, surface):
+    def dispatcher(func):
+        """
+        Декоратор обновляет необходимые переменные при изменении
+        разгона или скорости ветра
+        """
+        def wrapper(*args):
+            self = args[0]
+            x = rc.surface.x
+            y = rc.surface.y
+            gridSize = rc.surface.gridSize
+            N = rc.surface.kSize
+            M = rc.surface.phiSize
 
-        self.surface = surface
+            if self._n.all() != surface.normal.all() or \
+               self._r.all() != surface.coordinates.all():
+                self.geometryUpdate()
+            
 
-        self._R = self.position(self.surface_coordinates, self.sattelite_coordinates)
-        self._n = self.surface.normal
 
+            return func(*args)
 
+        return wrapper
 
-        self._gamma = 2*np.sin(rc.antenna.gainWidth/2)**2/np.log(2)
-        self._G = self.G(self._R, 
-                            rc.antenna.polarAngle, 
-                            rc.antenna.deviation, self._gamma)
+    def geometryUpdate(self):
+        self._r = surface.coordinates
+        self._R = self.position(surface.coordinates, self.sattelite_coordinates)
 
+        offset = rc.antenna.z*np.arctan(np.deg2rad(rc.antenna.deviation))
+        R0 = np.array([offset, 0, 0])[None].T*np.ones((1,self._R.shape[-1]))
+        # print(self._R[:,0])
+        self._R += R0
+        # print(self._R[:,0])
+        self._n = surface.normal
         self._nabs = self.abs(self._n)
         self._Rabs = self.abs(self._R)
-        self.tau = self._Rabs / rc.constants.lightSpeed
-        self.t0 = self._Rabs.min() / rc.constants.lightSpeed
+
+
+
+
+    def __init__(self):
+
+        self._r = None
+        self._R = None
+        self._n = None
+        self._nabs = None
+        self._Rabs = None
+
+        self.geometryUpdate()
+
+        self._gamma = 2*np.sin(rc.antenna.gainWidth/2)**2/np.log(2)
+        # self._G = self.G(self._R, 
+        #                     rc.antenna.polarAngle, 
+        #                     rc.antenna.deviation, self._gamma)
+
+
+        # self.tau = self._Rabs / rc.constants.lightSpeed
+        # self.t0 = self._Rabs.min() / rc.constants.lightSpeed
 
 
 
@@ -54,41 +92,29 @@ class Experiment():
 
         # Проекция вектора (X,Y,Z) на плоскость XY
         rho =  np.sqrt(np.power(X, 2) + np.power(Y, 2))
+        rho[np.where(rho == 0)] += 1.49e-8
 
         # Полярный угол в плоскости XY
         psi = np.arccos(X/rho)
 
 
-        theta = (Z*np.cos(xi) + rho*np.sin(xi)*np.cos(psi))
+        if not isinstance(xi, np.ndarray):
+            if isinstance(xi, list):
+                xi = np.array(xi)
+            else:
+                xi = np.array([xi])
+
+        xi = xi[np.newaxis]
+
+
+        theta = (Z*np.cos(xi.T) + rho*np.sin(xi.T)*np.cos(psi))
         theta *= 1/np.sqrt(X**2 + Y**2 + Z**2)
         theta = np.arccos(theta)
 
+        # Возвращает массив размерности (xi, r)
         return np.exp(-2/gamma * np.sin(theta)**2)
 
-    @property
-    def surface_coordinates(self):
-        return np.array(self.surface.coordinates, dtype=float)
 
-    @surface_coordinates.setter
-    def surface_coordinates(self, r):
-        for i in range(3):
-            np.copyto(self.surface.coordinates[i], r[i])
-
-        self._R = self.position(self.surface_coordinates, self.sattelite_coordinates)
-        self._Rabs = self.abs(self._R)
-
-    @property
-    def surface_normal(self):
-        return np.array(self.surface.normal, dtype=float)
-
-    @surface_normal.setter
-    def surface_normal(self, r):
-        for i in range(3):
-            np.copyto(self.surface.normal[i], r[i])
-        self._nabs = self.abs(self._surface.normal)
-
-
-        
     @property
     def sattelite_coordinates(self):
         return np.array([rc.antenna.x, rc.antenna.y, rc.antenna.z])
@@ -101,34 +127,79 @@ class Experiment():
 
 
 
-
-
-
     @property
     def incidence(self):
         z = np.array(self._R[-1], dtype=float)
         R = np.array(self._Rabs, dtype=float)
         return np.arccos(z/R)
 
-    @property
-    def localIncidence(self):
+    def localIncidence(self, xi=0):
+        rc.antenna.deviation = xi
+        self.geometryUpdate()
         R = np.array(self._R/self._Rabs, dtype=float)
         n = np.array(self._n/self._nabs, dtype=float)
-        theta0 = np.einsum('ij, ij -> j', R, n)
-        return np.arccos(theta0)
+
+
+
+
+        # print(R.shape)
+
+
+        # Матрица поворта вокруг X
+        # Mx = self.rotatex(np.pi/2)
+        My = self.rotatey(np.pi/2)
+        # taux = np.einsum('ij, jk -> ik', My, n)
+        # tauy = np.einsum('ij, jk -> ik', Mx, n)
+
+        theta0n = np.einsum('ij, ij -> j', R, n)
+        # theta0tau = np.einsum('ij, ij -> j', R, taux)
+        # theta0tauy = np.einsum('ij, ij -> j', R, tauy)
+
+
+        # return np.sign(theta0tau)*np.arccos(theta0n)
+        return np.arccos(theta0n)
 
     @staticmethod
-    def sort(incidence, err = 1):
+    def rotatex(alpha):
+        Mx = np.array([
+            [1,             0,             0 ],
+            [0, np.cos(alpha), -np.sin(alpha)],
+            [0, np.sin(alpha), +np.cos(alpha)]
+        ])
+        return Mx
+
+    @staticmethod
+    def rotatey(alpha):
+        My = np.array([
+            [+np.cos(alpha), 0, np.sin(alpha)],
+            [0,              1,            0 ],
+            [-np.sin(alpha), 0, np.cos(alpha)]
+        ])
+        return My
+
+    @staticmethod
+    def sort(incidence, xi=0, err = 0.7):
+
+        # if not isinstance(xi, np.ndarray):
+        #     if isinstance(xi, list):
+        #         xi = np.array(xi)
+        #     else:
+        #         xi = np.array([xi])
+
+        # xi = xi[np.newaxis]
+
+        # theta0 = np.abs(incidence - xi.T)
+        
+        # index = np.abs(theta0) < np.deg2rad(err)
         index = np.where(incidence < np.deg2rad(err))
         return index
 
     
-    @property
-    def gain(self):
-        size = self.surface.gridSize
+    def gain(self, theta, xi):
         self._G = self.G(self._R, 
-                            self.sattelite.polarAngle, 
-                            self.sattelite.deviation, self._gamma)
+                            theta,
+                            xi, self._gamma)
+        return self._G
 
     
     # @property
@@ -161,12 +232,43 @@ class Experiment():
         R = R[:,index]
 
 
-
-        G = self.G(R, self.sattelite.polarAngle, self.sattelite.deviation, self._gamma)
+        G = self.gain
 
         E0 = (G/Rabs)**2
         P = np.sum(E0**2/2)
         return P
+
+    def crossSection(self, theta):
+        # Эти штуки не зависят от ДН антенны, только от геометрии
+        # ind = self.sort(self.localIncidence)
+        # Rabs = self._Rabs[ind]
+        # R = R[:,index]
+        self.geometryUpdate()
+        # gamma = 2*np.sin(np.deg2rad(15)/2)**2/np.log(2)
+
+        # G = self.G(self._R, np.pi/2, theta, gamma)
+
+        N = np.zeros_like(theta, dtype=float)
+        for i, xi in enumerate(theta):
+            theta0 = self.localIncidence(xi=xi)
+
+            ind = self.sort(theta0, xi=xi)
+            # N[i] = np.sum(G[i][ind])
+            N[i] = ind[0].size
+
+
+        # # Эти, разумеется, зависят
+
+
+        # E0 = G**2/R**2*cos
+
+
+        return N
+
+    
+
+    
+
 
 
 

@@ -1,25 +1,27 @@
-    
+import pandas as pd
 import numpy as np
 from modeling import rc 
-from modeling.surface import *
-from modeling import surface 
-from modeling import spectrum as spec
+from modeling import surface, kernel, cuda
+from modeling import spectrum 
 import matplotlib.pyplot as plt
 from scipy.integrate import quad
 
-    
-kernel = kernel_default
-arr, X0, Y0 = run_kernels(kernel, surface)
-arr = np.array([arr[0],
-                arr[0]+arr[1],
-                arr[0]+arr[1]+arr[2],
-                arr[0]+arr[1]+arr[2]+arr[3]])
+U = np.linspace(5, 15, 5)
+X,Y = surface.meshgrid
 
-# for i in range(len(band)):
-    # moments = self.surface._staticMoments(X0[0], Y0[0], arr[i], )
-    # sigma[j,i] = moments
+for j in range(U.size):
+    rc.wind.speed = U[j]
+    arr = kernel.launch(cuda.default)
+    arrKa = kernel.convert_to_band(arr, 'Ka')
+    arrKu = kernel.convert_to_band(arr, 'Ku')
 
+    arr0 = kernel.launch(cuda.cwm)
+    arr0Ka = kernel.convert_to_band(arr, 'Ka')
+    arr0Ku = kernel.convert_to_band(arr, 'Ku')
 
-# with open("data/ModelMoments.xlsx", "wb") as f:
-            # df = df.to_excel(f)
+    moments = surface.staticMoments(X,Y, arr)
+    moments0 = surface.staticMoments(X,Y, arr)
+
+with open("data/ModelMoments.xlsx", "wb") as f:
+            df = df.to_excel(f)
 

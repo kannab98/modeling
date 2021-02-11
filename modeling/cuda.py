@@ -2,9 +2,21 @@ from numba import cuda, float32
 import math
 from cmath import exp, phase
 
+from . import rc
+g = rc.constants.gravityAcceleration
 
+__bibtex = {
+    "label" : "shuleykin",
+    "title" : "Физика моря",
+    "author" : "В.В. Шулейкин",
+    "year" : "1968",
+    "publisher" : "М. Наука"
+}
 
-
+@cuda.jit(device=True)
+def dispersion(k):
+    k = abs(k)
+    return math.sqrt(g*k + 74e-6*k**3)
 
 @cuda.jit(device=True)
 def identity(args: tuple):
@@ -76,8 +88,8 @@ def inverse(M, I):
 
 @cuda.jit(device=True)
 def newton(x0, y0, k, A, ):
-    epsabs = 1.49e-4
-    limit = 50
+    epsabs = 1.49e-2
+    limit = 5
     X0 = x0
     Y0 = y0
 
@@ -131,6 +143,7 @@ def cwm_grid(x: float, y: float, jac, k, A):
 
     return x, y, jac
 
+
 @cuda.jit
 def linearized_cwm_grid(x0, y0, k, A):
 
@@ -146,8 +159,8 @@ def base(surface, x, y, k, A, method):
     for n in range(k.shape[0]): 
         for m in range(k.shape[1]):
                 kr = k[n,m].real*x + k[n,m].imag*y
-                e = A[n,m] * exp(1j*kr) 
-
+                w = dispersion(k[n,m])
+                e = A[n,m] * exp(1j*kr)  # * exp(1j*w*t)
 
                 # Высоты (z)
                 surface[0] +=  +e.real
@@ -155,13 +168,30 @@ def base(surface, x, y, k, A, method):
                 surface[1] +=  -e.imag * k[n,m].real
                 # Наклоны Y (dz/dy)
                 surface[2] +=  -e.imag * k[n,m].imag
+                # Орбитальные скорости Vz (dz/dt)
+                surface[3] +=  -e.imag * w
 
-                # Поправка на наклоны заостренной поверхности
-                if method == "cwm":
-                    # Наклоны X dz/dx * dx/dx0 
-                    surface[1] *= 1 - e.real * (k[n,m].real * k[n,m].real)/abs(k[n,m])
+                # Vh -- скорость частицы вдоль направления распространения ветра.
+                # см. [shuleykin], гл. 3, пар. 5 Энергия волн.
+                # Из ЗСЭ V_h^2 + V_z^2 = const
+
+                # Орбитальные скорости Vx
+                surface[4] += e.real * w * k[n,m].real/abs(k[n,m])
+                # Орбитальные скорости Vy
+                surface[5] += e.real * w * k[n,m].imag/abs(k[n,m])
+
+
+
+
+
+                # # Поправка на наклоны заостренной поверхности
+                # if method == "cwm":
+                    # Наклоны X dz/dx * dx/dx0
+                    # surface[1] *= 1 - e.real * (k[n,m].real * k[n,m].real)/abs(k[n,m])
                     # Наклоны Y dz/dy * dy/dy0 
-                    surface[2] *= 1 - e.real * (k[n,m].imag * k[n,m].imag)/abs(k[n,m])
+                    # surface[2] *= 1 - e.real * (k[n,m].imag * k[n,m].imag)/abs(k[n,m])
+                #     # Орбитальные скорости Vh dVh/dx * dx/dx0
+                #     surface[4] *= 1 - e.real * (k[n,m].real * k[n,m].real)/abs(k[n,m])
 
     return surface
 
@@ -172,9 +202,9 @@ def cwm(ans, x, y, k, A):
     if i >= x.shape[0]:
         return
 
-    surface = cuda.local.array(3, float32)
+    surface = cuda.local.array(6, float32)
     surface = base(surface, x[i], y[i], k, A, 'cwm')
-    for j in range(3):
+    for j in range(6):
         ans[j, i] = surface[j]
 
 
@@ -185,8 +215,23 @@ def default(ans, x, y, k, A):
     if i >= x.shape[0]:
         return
 
-    surface = cuda.local.array(3, float32)
+    surface = cuda.local.array(6, float32)
     surface = base(surface, x[i], y[i], k, A, 'default')
-    for j in range(3):
+    for j in range(6):
         ans[j, i] = surface[j]
+
+
+@cuda.jit
+def check_cwm_grid(x, y, k, A):
+    i = cuda.grid(1)
+
+    if i >= x.shape[0]:
+        return
+
+    for n in range(k.shape[0]): 
+        for m in range(k.shape[1]):
+            kr = k[n,m].real*x[i] + k[n,m].imag*y[i]
+            e = A[n,m] * exp(1j*kr) 
+            x[i] -= e.imag * k[n,m].real/abs(k[n,m])
+            y[i] -= e.imag * k[n,m].imag/abs(k[n,m])
 
