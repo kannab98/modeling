@@ -111,8 +111,8 @@ class rcParams():
 
 rc = rcParams()
  
-# from modeling import Spectrum
-# spectrum = Spectrum.spectrum()
+from modeling import Spectrum
+spectrum = Spectrum.spectrum()
 
 
 # from modeling import Retracking

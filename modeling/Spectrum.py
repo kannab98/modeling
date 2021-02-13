@@ -2,14 +2,32 @@ import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
+import math as m
 from scipy import fft, integrate, interpolate, optimize
 from scipy.special import erf
 
 from . import rc
-from tqdm import tqdm
 
 g = rc.constants.gravityAcceleration
 logger = logging.getLogger(__name__)
+
+def ufunc(nin, nout):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            ufunc = np.frompyfunc(func, nin, nout)
+            return ufunc(*args, **kwargs)
+        return wrapper
+    return decorator
+
+def cart2pol(x, y):
+    theta = np.arctan2(y, x)
+    rho = np.hypot(x, y)
+    return theta, rho
+
+class spectrum2d(interpolate.interp2d, object):
+    def __init__(self, k, phi, spectrum1d, azdist, interp2d_kwargs={}):
+        z = spectrum1d(k) * azdist(k, phi).T
+        super().__init__(k, phi, z, **interp2d_kwargs)
 
 
 class dispersion:
@@ -29,7 +47,7 @@ class dispersion:
         из дисперсионного соотношения
         """
         k = np.abs(k)
-        return np.sqrt( dispersion.f(k) )
+        return np.sqrt( dispersion.f(k))
         
     @staticmethod
     def k(omega):
@@ -61,13 +79,52 @@ class dispersion:
 """
 Спектр ветрового волнения и зыби. Используется при построении морской поверхности. 
 """
-class spectrum():
+class spectrum:
+
+    def dispatcher(func):
+        """
+        Декоратор обновляет необходимые переменные при изменении
+        разгона или скорости ветра
+        """
+        def wrapper(*args, **kwargs):
+            self = args[0]
+            x = rc.surface.nonDimWindFetch
+            U = rc.wind.speed
+            band = rc.surface.band
+
+
+            if self.__x != x or self.__U != U or self.__band != band or self.peak == None:
+                self.peakUpdate()
+
+            self.__x, self.__U = x, U
+
+
+            return func(*args, **kwargs)
+        return wrapper
+
+    @dispatcher
+    def __call__(self, k):
+
+        if not isinstance(k, np.ndarray):
+            k = np.array([k])
+
+        k = np.abs(k)
+        limit = np.array([0, *self.limit_k, np.inf])
+
+        ryabkova = np.zeros(k.size, dtype=np.float64)
+
+        for j in range(1, limit.size):
+            self.piecewise_spectrum(j-1, k, where = (limit[j-1] <= k) & (k <= limit[j]), out=ryabkova)
+
+        return ryabkova
 
     def __init__(self):
         self.__x = rc.surface.nonDimWindFetch
         self.__U = rc.wind.speed
         self.__band = rc.surface.band
-        self.peakUpdate()
+        self.peak = None
+        self.k = np.logspace( np.log10(5e-2), np.log10(2e3), 10**3)
+
 
 
 
@@ -123,25 +180,7 @@ class spectrum():
         return edges
 
 
-    def dispatcher(func):
-        """
-        Декоратор обновляет необходимые переменные при изменении
-        разгона или скорости ветра
-        """
-        def wrapper(*args, **kwargs):
-            self = args[0]
-            x = rc.surface.nonDimWindFetch
-            U = rc.wind.speed
-            band = rc.surface.band
 
-            if self.__x != x or self.__U != U or self.__band != band:
-                self.peakUpdate()
-
-            self.__x, self.__U = x, U
-
-
-            return func(*args, **kwargs)
-        return wrapper
 
     def peakUpdate(self):
         x = rc.surface.nonDimWindFetch
@@ -197,7 +236,7 @@ class spectrum():
         logger.debug('Variance of heights sigma^2_h=%.6f' % self.quad(0, 0))
         logger.debug('Full variance of slopes sigma^2=%.6f' % self.quad(2, 0))
         if stype == "ryabkova":
-            spectrum = self.interpolate(self.ryabkova)
+            spectrum = self.interpolate(self.ryabkova, )
             # spectrum = self.interpolate(self.ryabkova)
         elif stype == 'slick':
             f = lambda k: self.ryabkova(k)*self.with_slick(k)
@@ -222,9 +261,12 @@ class spectrum():
         # Функция углового распределения
         km = self.peak
 
-        if not isinstance((k, phi), np.ndarray):
-            phi = np.array([phi])
+        print(type(k))
+        if not isinstance(k, np.ndarray):
             k = np.array([k])
+
+        if not isinstance(phi, np.ndarray):
+            phi = np.array([phi])
 
         phi -= np.deg2rad(rc.wind.direction)
         index = np.where(np.abs(phi) > np.pi)
@@ -248,22 +290,43 @@ class spectrum():
         return Phi.T
 
 
-    def JONSWAP(self, k):
-        if not isinstance(k, np.ndarray):
-            k = np.array([k])
+    # def JONSWAP(self, k):
+    #     # if not isinstance(k, np.ndarray):
+    #     #     k = np.array([k])
 
-        k = np.abs(k)
-        sigma = 0.09 * np.ones(k.size, dtype=np.float64)
-        sigma[ np.where(k < self.k_m) ] = 0.07
+    #     # k = np.abs(k)
+
+    #     sigma = 0.09 * np.ones(k.size, dtype=np.float64)
+    #     sigma[ np.where(k < self.k_m) ] = 0.07
+
+    #     Sw = (self._alpha/2 *
+    #           np.power(k,-3) * 
+    #           np.exp(-1.25 * np.power(self.k_m/k, 2)) *
+    #           np.power(self._gamma,
+    #                    np.exp(- (np.sqrt(k/self.k_m) - 1)**2 / (2*sigma**2))
+    #                 )
+    #           )
+
+    #     return  Sw 
+
+    @dispatcher
+    @ufunc(2, 1)
+    def JONSWAP(self, k):
+        if k >= self.k_m:
+            sigma = 0.09
+        else:
+            sigma = 0.07
+
 
         Sw = (self._alpha/2 *
-              k**(-3) * np.exp(-1.25 * (self.k_m/k)**2) *
-              np.power(self._gamma,
-                       np.exp(- (np.sqrt(k/self.k_m)-1)**2 / (2*sigma**2))
-                       )
+              m.pow(k, -3) * 
+              m.exp(-1.25 * m.pow(self.k_m/k, 2)) *
+              m.pow(self._gamma,
+                       m.exp(- (m.sqrt(k/self.k_m) - 1)**2 / (2*sigma**2))
+                    )
               )
+        return Sw
 
-        return  Sw 
 
     # Безразмерный коэффициент Gamma
     @staticmethod
@@ -285,14 +348,11 @@ class spectrum():
         if x >= 20170:
             return 0.0081
         else:
-            alpha = np.array([], dtype='float64')
-            alpha = [(
-                +0.0311937
+            alpha = (+0.0311937
                 - 0.00232774 * np.log(x)
                 - 8367.8678786/x**2
-                # + 4.5114599e617*np.exp(-x)
-            )]
-        return alpha[0]
+            )
+        return alpha
 
     # Вычисление безразмерной частоты Omega по безразмерному разгону x
     @staticmethod
@@ -309,16 +369,35 @@ class spectrum():
         return omega_tilde
 
 
-    def piecewise_spectrum(self, n, k):
-        # self.peakUpdate()
+    # def piecewise_spectrum(self, n, k, out=None, **kwargs):
+    #     power = [   
+    #                 4, 
+    #                 5, 
+    #                 7.647*np.power(rc.wind.speed, -0.237), 
+    #                 0.0007*np.power(rc.wind.speed, 2) - 0.0348*rc.wind.speed + 3.2714,
+    #                 5
+    #             ]
 
-        # print(self.k_m, self.limit_k, rc.surface.nonDimWindFetch)
+    #     if n == 0:
+    #         print(n)
+    #         self.JONSWAP(k, out=out, **kwargs)
+
+    #     else:
+    #         omega0 = dispersion.omega(self.limit_k[n-1])
+    #         beta0 = self.piecewise_spectrum(n-1, self.limit_k[n-1]) * \
+    #             omega0**power[n-1]/dispersion.det(self.limit_k[n-1])
+            
+    #         omega0 = dispersion.omega(k, **kwargs)
+    #         return beta0 * np.power(omega0, -power[n-1], **kwargs) * dispersion.det(k)
+
+    @ufunc(3, 1)
+    def piecewise_spectrum(self, n, k):
         power = [   
                     4, 
                     5, 
                     7.647*np.power(rc.wind.speed, -0.237), 
                     0.0007*np.power(rc.wind.speed, 2) - 0.0348*rc.wind.speed + 3.2714,
-                    5
+                    5,
                 ]
 
         if n == 0:
@@ -328,8 +407,9 @@ class spectrum():
             omega0 = dispersion.omega(self.limit_k[n-1])
             beta0 = self.piecewise_spectrum(n-1, self.limit_k[n-1]) * \
                 omega0**power[n-1]/dispersion.det(self.limit_k[n-1])
+            
             omega0 = dispersion.omega(k)
-            return beta0/omega0**power[n-1]*dispersion.det(k)
+            return beta0 * np.power(omega0, -power[n-1]) * dispersion.det(k)
     
     @dispatcher
     def quad(self, a,b, k0=None, k1=None, **quadkwargs):
@@ -445,33 +525,33 @@ class spectrum():
         K = fft.fftshift(K)
         return K
 
-    def spectrum_cwm(self, xmax):
-        sigma = np.zeros(2)
-        sigma[0] = self.quad(0,0)
-        sigma[1] = self.quad(1,0)
+    # def spectrum_cwm(self, xmax):
+    #     sigma = np.zeros(2)
+    #     sigma[0] = self.quad(0,0)
+    #     sigma[1] = self.quad(1,0)
 
-        step = self.fftstep(xmax)
-        k = np.arange(-self.KT[-1], self.KT[-1], step)
-        f = self.fftcorrelate(xmax)
-        S = np.zeros((2, k.size), dtype=np.complex64)
-        S[0,:] = 2*(sigma[0] - f)
-        S[1,:] = 2*(sigma[1] - self.fftcorrelate(xmax, a=1))
+    #     step = self.fftstep(xmax)
+    #     k = np.arange(-self.KT[-1], self.KT[-1], step)
+    #     f = self.fftcorrelate(xmax)
+    #     S = np.zeros((2, k.size), dtype=np.complex64)
+    #     S[0,:] = 2*(sigma[0] - f)
+    #     S[1,:] = 2*(sigma[1] - self.fftcorrelate(xmax, a=1))
 
-        dC = np.zeros((2, k.size), dtype=np.complex64)
-        dC[0] = 1j*k*f
-        dC[1] = -(k)**2*f
+    #     dC = np.zeros((2, k.size), dtype=np.complex64)
+    #     dC[0] = 1j*k*f
+    #     dC[1] = -(k)**2*f
 
-        spec = fft.fft(
-            + np.exp( -(k*sigma[0])**2 ) 
-                * (sigma[0] - sigma[1]**2)  
-            - np.exp(-k**2/2*S[0]) 
-                * (   
-                    + 1/2 * S[0] * (1 - 2j*k*dC[0] - dC[1] - (k*dC[0])**2)
-                    - 1/4 * S[1]**2
-                  )
+    #     spec = fft.fft(
+    #         + np.exp( -(k*sigma[0])**2 ) 
+    #             * (sigma[0] - sigma[1]**2)  
+    #         - np.exp(-k**2/2*S[0]) 
+    #             * (   
+    #                 + 1/2 * S[0] * (1 - 2j*k*dC[0] - dC[1] - (k*dC[0])**2)
+    #                 - 1/4 * S[1]**2
+    #               )
 
-        )
-        return fft.fftshift(spec)
+    #     )
+    #     return fft.fftshift(spec)
 
     def pdf_heights(self, z, dtype="default"):
         sigma0 = self.quad(0,0)
@@ -503,17 +583,19 @@ class spectrum():
 
 
 
-    def spectrum(self, k):
 
 
-        k = np.abs(k)
-        if k == 0:
-               return 0
+    # def spectrum(self, k):
 
-        limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
-        for j in range(1, limit.size):
-            if k <= limit[j]:
-               return self.piecewise_spectrum(j-1, k)
+
+    #     k = np.abs(k)
+    #     if k == 0:
+    #            return 0
+
+    #     limit = np.array([self.KT[0], *self.limit_k, self.KT[-1]])
+    #     for j in range(1, limit.size):
+    #         if k <= limit[j]:
+    #            return self.piecewise_spectrum(j-1, k)
 
         # if k > limit[-1]:
             #    return self.piecewise_spectrum(3, k)
@@ -529,6 +611,7 @@ class spectrum():
         ind = np.zeros((limit.size), dtype=int)
 
         ryabkova = np.zeros(k.size, dtype=np.float64)
+
         for j in range(1, limit.size):
             tmp = np.where(k <= limit[j])[0]
             if tmp.size == 0:
@@ -640,10 +723,11 @@ class spectrum():
 
     def interpolate(self, spectrum):
         # k0 -- густая сетка, нужна для интегрирования и интерполирования
+        fill_value=1.49e-32
         k0 = np.logspace( np.log10(self.KT[0]), np.log10(self.KT[-1]), 10**5)
         k0[0] = self.KT[0]
         k0[-1] = self.KT[-1]
-        spectrum = interpolate.interp1d(k0, spectrum(k0))
+        spectrum = interpolate.interp1d(k0, spectrum(k0), fill_value=1.49e-32, bounds_error = True)
         return spectrum
 
     def swell_spectrum(self, k):
